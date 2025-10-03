@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -45,6 +46,23 @@ function BreadcrumbNav() {
     const pathname = usePathname();
     const segments = pathname.split('/').filter(Boolean);
 
+    // Don't show breadcrumbs on the dashboard
+    if (segments.length === 1 && segments[0] === 'dashboard') {
+        return (
+            <Breadcrumb className="hidden md:flex">
+                <BreadcrumbList>
+                    <BreadcrumbItem>
+                        <BreadcrumbPage>Dashboard</BreadcrumbPage>
+                    </BreadcrumbItem>
+                </BreadcrumbList>
+            </Breadcrumb>
+        );
+    }
+    
+    // Don't show breadcrumbs on root pages that are not dashboard
+    if (segments.length === 0) return null;
+
+
     return (
         <Breadcrumb className="hidden md:flex">
             <BreadcrumbList>
@@ -53,10 +71,9 @@ function BreadcrumbNav() {
                         <Link href="/dashboard">Dashboard</Link>
                     </BreadcrumbLink>
                 </BreadcrumbItem>
-                {segments.map((segment, index) => {
-                    if(segment === 'dashboard') return null;
-                    const href = `/${segments.slice(0, index + 1).join('/')}`;
-                    const isLast = index === segments.length - 1;
+                {segments.filter(s => s !== 'dashboard').map((segment, index, arr) => {
+                    const href = `/dashboard/${segments.filter(s => s !== 'dashboard').slice(0, index + 1).join('/')}`;
+                    const isLast = index === arr.length - 1;
                     return (
                         <React.Fragment key={href}>
                             <BreadcrumbSeparator />

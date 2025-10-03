@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import { SidebarProvider } from '@/components/ui/sidebar';
 import { Nav } from '@/components/nav';
 import { Header } from '@/components/header';
+import React from 'react';
 
 export const metadata: Metadata = {
   title: 'Dashboard - SynergyFlow ERP',
@@ -14,7 +14,6 @@ export default function AppLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <SidebarProvider>
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
             <Nav />
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
@@ -24,6 +23,5 @@ export default function AppLayout({
                 </main>
             </div>
         </div>
-    </SidebarProvider>
   );
 }
