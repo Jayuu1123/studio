@@ -1,3 +1,10 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "login-background",
+      "description": "Abstract background for ERP login page",
+      "imageUrl": "https://images.unsplash.com/photo-1627050535736-e68172f62a27?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMG9mZmljZXxlbnwwfHx8fDE3NTk0ODE2MDh8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "abstract office"
+    }
+  ]
 }
