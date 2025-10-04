@@ -36,6 +36,8 @@ import { unslugify } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import type { RequisitionEntry } from '@/lib/types';
 import { requisitionEntries } from '@/lib/data';
+import Link from 'next/link';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const statusConfig: {
   [key: string]: {
@@ -80,7 +82,11 @@ export default function TransactionSubmodulePage({
                     <DropdownMenuItem>Option 2</DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
-            <Button><PlusCircle className="h-4 w-4 mr-2" />Add New</Button>
+            <Button asChild>
+              <Link href={`/transactions/${params.submodule}/new`}>
+                <PlusCircle className="h-4 w-4 mr-2" />Add New
+              </Link>
+            </Button>
         </div>
       </div>
       <Card>
@@ -132,13 +138,13 @@ export default function TransactionSubmodulePage({
                   </TableCell>
                   <TableCell>
                       <div className="font-medium">{entry.user}</div>
-                      <div className="text-xs text-muted-foreground">{entry.date.toLocaleDateString()}</div>
+                      <div className="text-xs text-muted-foreground">{new Date(entry.date).toLocaleDateString()}</div>
                   </TableCell>
                   <TableCell className="font-medium text-primary hover:underline cursor-pointer">
                     {entry.docNo}
                   </TableCell>
                   <TableCell>{entry.category}</TableCell>
-                  <TableCell>{entry.date.toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
                   <TableCell>{entry.department}</TableCell>
                   <TableCell>{entry.productionItem}</TableCell>
                   <TableCell>
@@ -172,4 +178,3 @@ export default function TransactionSubmodulePage({
     </div>
   );
 }
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
