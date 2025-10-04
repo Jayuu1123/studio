@@ -41,17 +41,14 @@ import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import type { TransactionEntry } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
 
 
-export default function NewTransactionEntryPage({
-  params,
-}: {
-  params: { submodule: string };
-}) {
-  const { submodule } = params;
+export default function NewTransactionEntryPage() {
+  const params = useParams();
+  const submodule = params.submodule as string;
   const submoduleName = unslugify(submodule);
   const firestore = useFirestore();
   const { toast } = useToast();

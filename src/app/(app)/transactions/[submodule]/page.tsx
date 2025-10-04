@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Lock,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -58,12 +58,9 @@ const statusConfig: {
 };
 
 
-export default function TransactionSubmodulePage({
-  params,
-}: {
-  params: { submodule: string };
-}) {
-  const { submodule } = params;
+export default function TransactionSubmodulePage() {
+  const params = useParams();
+  const submodule = params.submodule as string;
   const submoduleName = unslugify(submodule);
   const firestore = useFirestore();
   const router = useRouter();
