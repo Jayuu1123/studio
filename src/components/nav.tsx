@@ -36,6 +36,7 @@ const navItems = [
   { href: '/manufacturing', icon: Building, label: 'Manufacturing' },
   { href: '/crm', icon: HeartHandshake, label: 'CRM' },
   { href: '/reports', icon: LineChart, label: 'Reports' },
+  { href: '/form-setting', icon: FileText, label: 'Form Setting' },
 ];
 
 export function Nav() {

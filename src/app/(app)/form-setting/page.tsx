@@ -1,40 +1,20 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import Link from 'next/link';
 
-const transactionModules = [
+const formSettingModules = [
   {
-    category: 'Production',
+    category: 'Form Setting',
     items: [
-      { name: 'Production Order', code: 'PO', entries: 33, pending: 297, href: '#' },
-      { name: 'Production Issue', code: 'PI', entries: 0, pending: 1461, href: '#' },
-      { name: 'Production Receipt', code: 'PR', entries: 0, pending: 45, href: '#' },
-      { name: 'In House Job Work', code: 'IHJW', entries: 10, pending: 73, href: '#' },
-    ]
-  },
-  {
-    category: 'Purchase',
-    items: [
-      { name: 'Indent', code: 'ID', entries: 660, pending: 60, href: '#' },
-      { name: 'Purchase Order', code: 'PO', entries: 1335, pending: 3128, href: '#' },
-      { name: 'GRN', code: 'GN', entries: 1374, pending: 457, href: '#' },
-    ]
-  },
-  {
-    category: 'Store Management',
-    items: [
-      { name: 'Requisition', code: 'RE', entries: 680, pending: 1337, href: '#' },
-      { name: 'Material Issue', code: 'MI', entries: 754, pending: 1725, href: '#' },
-      { name: 'Material Receipt', code: 'MR', entries: 275, pending: 3262, href: '#' },
+      { name: 'Create Form', code: 'CF', entries: 5, pending: 10, href: '#' },
     ]
   }
 ];
 
-
-export default function TransactionsPage() {
+export default function FormSettingPage() {
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold font-headline">Transactions</h1>
-      {transactionModules.map((module) => (
+      <h1 className="text-3xl font-bold font-headline">Form Setting</h1>
+      {formSettingModules.map((module) => (
         <div key={module.category}>
           <h2 className="text-2xl font-semibold mb-4">{module.category}</h2>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
