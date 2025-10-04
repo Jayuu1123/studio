@@ -13,7 +13,8 @@ import {
   FileText,
   Building,
   DollarSign,
-  HeartHandshake
+  HeartHandshake,
+  ArrowRightLeft
 } from 'lucide-react';
 import {
   Tooltip,
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', icon: Home, label: 'Dashboard' },
+  { href: '/transactions', icon: ArrowRightLeft, label: 'Transactions' },
   { href: '/sales', icon: ShoppingCart, label: 'Sales' },
   { href: '/inventory', icon: Package, label: 'Inventory' },
   { href: '/purchase', icon: Briefcase, label: 'Purchase' },

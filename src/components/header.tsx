@@ -15,6 +15,7 @@ import {
   Building,
   DollarSign,
   HeartHandshake,
+  ArrowRightLeft,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -31,6 +32,7 @@ import { UserNav } from './user-nav';
 
 const mobileNavItems = [
     { href: '/dashboard', icon: Home, label: 'Dashboard' },
+    { href: '/transactions', icon: ArrowRightLeft, label: 'Transactions' },
     { href: '/sales', icon: ShoppingCart, label: 'Sales' },
     { href: '/inventory', icon: Package, label: 'Inventory' },
     { href: '/purchase', icon: Briefcase, label: 'Purchase' },
@@ -72,7 +74,7 @@ function BreadcrumbNav() {
                     </BreadcrumbLink>
                 </BreadcrumbItem>
                 {segments.filter(s => s !== 'dashboard').map((segment, index, arr) => {
-                    const href = `/dashboard/${segments.filter(s => s !== 'dashboard').slice(0, index + 1).join('/')}`;
+                    const href = `/${segments.slice(0, index + 1).join('/')}`;
                     const isLast = index === arr.length - 1;
                     return (
                         <React.Fragment key={href}>
