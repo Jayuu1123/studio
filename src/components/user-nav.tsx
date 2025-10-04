@@ -53,8 +53,12 @@ export function UserNav() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-            <Link href="/">Log out</Link>
-          <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
+            <Link href="/">
+                <span>
+                    Log out
+                    <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
+                </span>
+            </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
