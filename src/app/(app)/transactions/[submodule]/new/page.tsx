@@ -51,7 +51,8 @@ export default function NewTransactionEntryPage({
 }: {
   params: { submodule: string };
 }) {
-  const submoduleName = unslugify(params.submodule);
+  const { submodule } = params;
+  const submoduleName = unslugify(submodule);
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
@@ -82,14 +83,14 @@ export default function NewTransactionEntryPage({
         description: `New entry for ${submoduleName} has been saved.`,
     });
 
-    router.push(`/transactions/${params.submodule}`);
+    router.push(`/transactions/${submodule}`);
   };
 
   return (
     <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
       <div className="flex items-center gap-4">
         <Button variant="outline" size="icon" className="h-7 w-7" asChild>
-          <Link href={`/transactions/${params.submodule}`}>
+          <Link href={`/transactions/${submodule}`}>
             <ChevronLeft className="h-4 w-4" />
             <span className="sr-only">Back</span>
           </Link>
