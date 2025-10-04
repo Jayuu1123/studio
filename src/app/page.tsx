@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { placeholderImages } from '@/lib/placeholder-images';
+import { useEffect } from 'react';
+import { useAuth } from '@/firebase';
+import { initiateAnonymousSignIn } from '@/firebase/non-blocking-login';
 
 function Logo() {
   return (
@@ -29,6 +32,13 @@ function Logo() {
 
 export default function LoginPage() {
   const loginImage = placeholderImages.find(p => p.id === 'login-background');
+  const auth = useAuth();
+
+  useEffect(() => {
+    if (auth) {
+      initiateAnonymousSignIn(auth);
+    }
+  }, [auth]);
 
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
