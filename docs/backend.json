@@ -1,0 +1,1378 @@
+{
+  "entities": {
+    "FormDefinition": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FormDefinition",
+      "type": "object",
+      "description": "Defines the structure and properties of a dynamic form.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the form definition."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the form."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the form's purpose."
+        },
+        "fields": {
+          "type": "array",
+          "description": "Array of field definitions within the form.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workflowId": {
+          "type": "string",
+          "description": "Reference to Workflow. (Relationship: Workflow 1:N FormDefinition)"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "fields"
+      ]
+    },
+    "FormField": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FormField",
+      "type": "object",
+      "description": "Defines the properties of a single field within a dynamic form.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the form field."
+        },
+        "formDefinitionId": {
+          "type": "string",
+          "description": "Reference to FormDefinition. (Relationship: FormDefinition 1:N FormField)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the field."
+        },
+        "type": {
+          "type": "string",
+          "description": "Data type of the field (e.g., text, number, date)."
+        },
+        "validationRules": {
+          "type": "string",
+          "description": "Rules for validating the field's input."
+        },
+        "lookupTableId": {
+          "type": "string",
+          "description": "Reference to LookupTable. (Relationship: LookupTable 1:N FormField) - optional"
+        }
+      },
+      "required": [
+        "id",
+        "formDefinitionId",
+        "name",
+        "type"
+      ]
+    },
+    "LookupTable": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "LookupTable",
+      "type": "object",
+      "description": "Defines a lookup table for form field options.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the lookup table."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the lookup table."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the lookup table's purpose."
+        },
+        "values": {
+          "type": "array",
+          "description": "Array of possible values for the lookup table.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "values"
+      ]
+    },
+    "Workflow": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Workflow",
+      "type": "object",
+      "description": "Defines a workflow process with steps and conditions.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the workflow."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the workflow."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the workflow's purpose."
+        },
+        "steps": {
+          "type": "array",
+          "description": "Array of workflow steps.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "steps"
+      ]
+    },
+    "WorkflowStep": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "WorkflowStep",
+      "type": "object",
+      "description": "Defines a single step within a workflow process.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the workflow step."
+        },
+        "workflowId": {
+          "type": "string",
+          "description": "Reference to Workflow. (Relationship: Workflow 1:N WorkflowStep)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the workflow step."
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of the workflow step (e.g., approval, task)."
+        },
+        "conditions": {
+          "type": "string",
+          "description": "Conditions that must be met to execute the step."
+        },
+        "assignee": {
+          "type": "string",
+          "description": "Reference to Role. (Relationship: Role 1:N WorkflowStep) - Role assigned to this step"
+        }
+      },
+      "required": [
+        "id",
+        "workflowId",
+        "name",
+        "type"
+      ]
+    },
+    "MISReport": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MISReport",
+      "type": "object",
+      "description": "Defines a management information system (MIS) report.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the MIS report."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the MIS report."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the report's purpose."
+        },
+        "storedProcedure": {
+          "type": "string",
+          "description": "Name of the stored procedure used to generate the report."
+        },
+        "outputFormat": {
+          "type": "string",
+          "description": "Format of the report output (e.g., PDF, CSV)."
+        },
+        "schedule": {
+          "type": "string",
+          "description": "Scheduling information for the report generation."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "storedProcedure",
+        "outputFormat"
+      ]
+    },
+    "Role": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Role",
+      "type": "object",
+      "description": "Defines a role within the role-based access control (RBAC) system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the role."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the role."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the role's permissions and responsibilities."
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Array of permissions assigned to the role.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user in the system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "username": {
+          "type": "string",
+          "description": "Username of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "roleIds": {
+          "type": "array",
+          "description": "References to Roles. (Relationship: User N:N Role)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "email"
+      ]
+    },
+    "TransactionCode": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TransactionCode",
+      "type": "object",
+      "description": "Defines a transaction code and its associated action.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the transaction code."
+        },
+        "code": {
+          "type": "string",
+          "description": "The transaction code itself."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the action performed by the transaction code."
+        },
+        "relatedEntities": {
+          "type": "array",
+          "description": "Entities to which the transaction code relates.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "description"
+      ]
+    },
+    "Product": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Product",
+      "type": "object",
+      "description": "Represents a product in the inventory.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the product."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the product."
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "Reference to Category. (Relationship: Category 1:N Product)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the product."
+        },
+        "price": {
+          "type": "number",
+          "description": "Price of the product."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "categoryId",
+        "price"
+      ]
+    },
+    "Category": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Category",
+      "type": "object",
+      "description": "Represents a category for products.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the category."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the category."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the category."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Stock": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Stock",
+      "type": "object",
+      "description": "Represents the stock level of a product.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the stock entry."
+        },
+        "productId": {
+          "type": "string",
+          "description": "Reference to Product. (Relationship: Product 1:N Stock)"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Quantity of the product in stock."
+        },
+        "location": {
+          "type": "string",
+          "description": "Location where the stock is stored."
+        }
+      },
+      "required": [
+        "id",
+        "productId",
+        "quantity"
+      ]
+    },
+    "Customer": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Customer",
+      "type": "object",
+      "description": "Represents a customer.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the customer."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the customer."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the customer.",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number of the customer."
+        },
+        "address": {
+          "type": "string",
+          "description": "Address of the customer."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email"
+      ]
+    },
+    "Order": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Order",
+      "type": "object",
+      "description": "Represents an order placed by a customer.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the order."
+        },
+        "customerId": {
+          "type": "string",
+          "description": "Reference to Customer. (Relationship: Customer 1:N Order)"
+        },
+        "orderDate": {
+          "type": "string",
+          "description": "Date the order was placed.",
+          "format": "date-time"
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Total amount of the order."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the order (e.g., pending, shipped, delivered)."
+        },
+        "orderLineItemIds": {
+          "type": "array",
+          "description": "References to OrderLineItem. (Relationship: Order 1:N OrderLineItem)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "customerId",
+        "orderDate",
+        "totalAmount",
+        "status"
+      ]
+    },
+    "OrderLineItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "OrderLineItem",
+      "type": "object",
+      "description": "Represents an item in an order.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the order line item."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "Reference to Order. (Relationship: Order 1:N OrderLineItem)"
+        },
+        "productId": {
+          "type": "string",
+          "description": "Reference to Product. (Relationship: Product 1:N OrderLineItem)"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Quantity of the product in the order."
+        },
+        "price": {
+          "type": "number",
+          "description": "Price of the product at the time of the order."
+        }
+      },
+      "required": [
+        "id",
+        "orderId",
+        "productId",
+        "quantity",
+        "price"
+      ]
+    },
+    "Invoice": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Invoice",
+      "type": "object",
+      "description": "Represents an invoice for an order.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the invoice."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "Reference to Order. (Relationship: Order 1:N Invoice)"
+        },
+        "invoiceDate": {
+          "type": "string",
+          "description": "Date the invoice was issued.",
+          "format": "date-time"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Date the invoice is due.",
+          "format": "date-time"
+        },
+        "amountDue": {
+          "type": "number",
+          "description": "Amount due on the invoice."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the invoice (e.g., paid, unpaid, overdue)."
+        }
+      },
+      "required": [
+        "id",
+        "orderId",
+        "invoiceDate",
+        "dueDate",
+        "amountDue",
+        "status"
+      ]
+    },
+    "Return": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Return",
+      "type": "object",
+      "description": "Represents a customer return.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the return."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "Reference to Order. (Relationship: Order 1:N Return)"
+        },
+        "returnDate": {
+          "type": "string",
+          "description": "Date the return was processed.",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for the return."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the return (e.g., pending, approved, rejected)."
+        },
+        "returnLineItemIds": {
+          "type": "array",
+          "description": "References to ReturnLineItem. (Relationship: Return 1:N ReturnLineItem)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "orderId",
+        "returnDate",
+        "reason",
+        "status"
+      ]
+    },
+    "ReturnLineItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ReturnLineItem",
+      "type": "object",
+      "description": "Represents an item in a return.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the return line item."
+        },
+        "returnId": {
+          "type": "string",
+          "description": "Reference to Return. (Relationship: Return 1:N ReturnLineItem)"
+        },
+        "productId": {
+          "type": "string",
+          "description": "Reference to Product. (Relationship: Product 1:N ReturnLineItem)"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Quantity of the product being returned."
+        },
+        "refundAmount": {
+          "type": "number",
+          "description": "Amount refunded for the product."
+        }
+      },
+      "required": [
+        "id",
+        "returnId",
+        "productId",
+        "quantity",
+        "refundAmount"
+      ]
+    },
+    "Supplier": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Supplier",
+      "type": "object",
+      "description": "Represents a supplier.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the supplier."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the supplier."
+        },
+        "contactPerson": {
+          "type": "string",
+          "description": "Contact person at the supplier."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the supplier.",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number of the supplier."
+        },
+        "address": {
+          "type": "string",
+          "description": "Address of the supplier."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email"
+      ]
+    },
+    "PurchaseOrder": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PurchaseOrder",
+      "type": "object",
+      "description": "Represents a purchase order.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the purchase order."
+        },
+        "supplierId": {
+          "type": "string",
+          "description": "Reference to Supplier. (Relationship: Supplier 1:N PurchaseOrder)"
+        },
+        "orderDate": {
+          "type": "string",
+          "description": "Date the purchase order was placed.",
+          "format": "date-time"
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Total amount of the purchase order."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the purchase order (e.g., pending, approved, received)."
+        },
+        "poLineItemIds": {
+          "type": "array",
+          "description": "References to POLineItem. (Relationship: PurchaseOrder 1:N POLineItem)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "supplierId",
+        "orderDate",
+        "totalAmount",
+        "status"
+      ]
+    },
+    "POLineItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "POLineItem",
+      "type": "object",
+      "description": "Represents an item in a purchase order.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the purchase order line item."
+        },
+        "purchaseOrderId": {
+          "type": "string",
+          "description": "Reference to PurchaseOrder. (Relationship: PurchaseOrder 1:N POLineItem)"
+        },
+        "productId": {
+          "type": "string",
+          "description": "Reference to Product. (Relationship: Product 1:N POLineItem)"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Quantity of the product in the purchase order."
+        },
+        "price": {
+          "type": "number",
+          "description": "Price of the product in the purchase order."
+        }
+      },
+      "required": [
+        "id",
+        "purchaseOrderId",
+        "productId",
+        "quantity",
+        "price"
+      ]
+    },
+    "GoodsReceiptNote": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GoodsReceiptNote",
+      "type": "object",
+      "description": "Represents a goods receipt note.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the goods receipt note."
+        },
+        "purchaseOrderId": {
+          "type": "string",
+          "description": "Reference to PurchaseOrder. (Relationship: PurchaseOrder 1:N GoodsReceiptNote)"
+        },
+        "receiptDate": {
+          "type": "string",
+          "description": "Date the goods were received.",
+          "format": "date-time"
+        },
+        "receivedBy": {
+          "type": "string",
+          "description": "Name of the person who received the goods."
+        },
+        "grnLineItemIds": {
+          "type": "array",
+          "description": "References to GRNLineItem. (Relationship: GoodsReceiptNote 1:N GRNLineItem)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "purchaseOrderId",
+        "receiptDate",
+        "receivedBy"
+      ]
+    },
+    "GRNLineItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GRNLineItem",
+      "type": "object",
+      "description": "Represents a line item in a goods receipt note.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the goods receipt note line item."
+        },
+        "goodsReceiptNoteId": {
+          "type": "string",
+          "description": "Reference to GoodsReceiptNote. (Relationship: GoodsReceiptNote 1:N GRNLineItem)"
+        },
+        "productId": {
+          "type": "string",
+          "description": "Reference to Product. (Relationship: Product 1:N GRNLineItem)"
+        },
+        "quantityReceived": {
+          "type": "number",
+          "description": "Quantity of the product received."
+        },
+        "condition": {
+          "type": "string",
+          "description": "Condition of the product received."
+        }
+      },
+      "required": [
+        "id",
+        "goodsReceiptNoteId",
+        "productId",
+        "quantityReceived",
+        "condition"
+      ]
+    },
+    "Payment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Payment",
+      "type": "object",
+      "description": "Represents a payment made to a supplier.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the payment."
+        },
+        "supplierId": {
+          "type": "string",
+          "description": "Reference to Supplier. (Relationship: Supplier 1:N Payment)"
+        },
+        "paymentDate": {
+          "type": "string",
+          "description": "Date the payment was made.",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount of the payment."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Method of payment (e.g., cash, check, credit card)."
+        },
+        "purchaseOrderIds": {
+          "type": "array",
+          "description": "References to PurchaseOrder. (Relationship: Payment N:N PurchaseOrder)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "supplierId",
+        "paymentDate",
+        "amount",
+        "paymentMethod"
+      ]
+    },
+    "ChartOfAccounts": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ChartOfAccounts",
+      "type": "object",
+      "description": "Represents a chart of accounts.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the chart of accounts entry."
+        },
+        "accountName": {
+          "type": "string",
+          "description": "Name of the account."
+        },
+        "accountType": {
+          "type": "string",
+          "description": "Type of account (e.g., asset, liability, equity, revenue, expense)."
+        },
+        "accountCode": {
+          "type": "string",
+          "description": "Code of the account."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the account."
+        }
+      },
+      "required": [
+        "id",
+        "accountName",
+        "accountType",
+        "accountCode"
+      ]
+    },
+    "LedgerEntry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "LedgerEntry",
+      "type": "object",
+      "description": "Represents an entry in the ledger.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ledger entry."
+        }
+      }
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Collection of user documents. Stores personal user data. Path-based ownership for private data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles/{roleId}",
+        "definition": {
+          "entityName": "Role",
+          "schema": {
+            "$ref": "#/backend/entities/Role"
+          },
+          "description": "Collection of role documents.  Defines roles within the RBAC system.",
+          "params": [
+            {
+              "name": "roleId",
+              "description": "The unique identifier for the role."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/workflows/{workflowId}",
+        "definition": {
+          "entityName": "Workflow",
+          "schema": {
+            "$ref": "#/backend/entities/Workflow"
+          },
+          "description": "Collection of workflows owned by a specific user. Path-based ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "workflowId",
+              "description": "The unique identifier for the workflow."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}",
+        "definition": {
+          "entityName": "WorkflowStep",
+          "schema": {
+            "$ref": "#/backend/entities/WorkflowStep"
+          },
+          "description": "Collection of workflow steps belonging to a specific workflow. Path-based ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "workflowId",
+              "description": "The unique identifier for the workflow."
+            },
+            {
+              "name": "workflowStepId",
+              "description": "The unique identifier for the workflow step."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/formDefinitions/{formDefinitionId}",
+        "definition": {
+          "entityName": "FormDefinition",
+          "schema": {
+            "$ref": "#/backend/entities/FormDefinition"
+          },
+          "description": "Collection of form definitions owned by a specific user. Path-based ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "formDefinitionId",
+              "description": "The unique identifier for the form definition."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}",
+        "definition": {
+          "entityName": "FormField",
+          "schema": {
+            "$ref": "#/backend/entities/FormField"
+          },
+          "description": "Collection of form fields belonging to a specific form definition. Includes denormalized 'workflowId' and potentially other workflow-related attributes from the parent FormDefinition for authorization independence.  Path-based ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "formDefinitionId",
+              "description": "The unique identifier for the form definition."
+            },
+            {
+              "name": "formFieldId",
+              "description": "The unique identifier for the form field."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/lookupTables/{lookupTableId}",
+        "definition": {
+          "entityName": "LookupTable",
+          "schema": {
+            "$ref": "#/backend/entities/LookupTable"
+          },
+          "description": "Collection of lookup tables.",
+          "params": [
+            {
+              "name": "lookupTableId",
+              "description": "The unique identifier for the lookup table."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/misReports/{misReportId}",
+        "definition": {
+          "entityName": "MISReport",
+          "schema": {
+            "$ref": "#/backend/entities/MISReport"
+          },
+          "description": "Collection of MIS reports. Includes denormalized 'members' map for authorization independence.",
+          "params": [
+            {
+              "name": "misReportId",
+              "description": "The unique identifier for the MIS report."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/transactionCodes/{transactionCodeId}",
+        "definition": {
+          "entityName": "TransactionCode",
+          "schema": {
+            "$ref": "#/backend/entities/TransactionCode"
+          },
+          "description": "Collection of transaction codes.",
+          "params": [
+            {
+              "name": "transactionCodeId",
+              "description": "The unique identifier for the transaction code."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/products/{productId}",
+        "definition": {
+          "entityName": "Product",
+          "schema": {
+            "$ref": "#/backend/entities/Product"
+          },
+          "description": "Collection of product documents.",
+          "params": [
+            {
+              "name": "productId",
+              "description": "The unique identifier for the product."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/categories/{categoryId}",
+        "definition": {
+          "entityName": "Category",
+          "schema": {
+            "$ref": "#/backend/entities/Category"
+          },
+          "description": "Collection of product categories.",
+          "params": [
+            {
+              "name": "categoryId",
+              "description": "The unique identifier for the category."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/stocks/{stockId}",
+        "definition": {
+          "entityName": "Stock",
+          "schema": {
+            "$ref": "#/backend/entities/Stock"
+          },
+          "description": "Collection of stock level entries.",
+          "params": [
+            {
+              "name": "stockId",
+              "description": "The unique identifier for the stock entry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/customers/{customerId}",
+        "definition": {
+          "entityName": "Customer",
+          "schema": {
+            "$ref": "#/backend/entities/Customer"
+          },
+          "description": "Collection of customer documents.",
+          "params": [
+            {
+              "name": "customerId",
+              "description": "The unique identifier for the customer."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/orders/{orderId}",
+        "definition": {
+          "entityName": "Order",
+          "schema": {
+            "$ref": "#/backend/entities/Order"
+          },
+          "description": "Collection of order documents.",
+          "params": [
+            {
+              "name": "orderId",
+              "description": "The unique identifier for the order."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/orders/{orderId}/orderLineItems/{orderLineItemId}",
+        "definition": {
+          "entityName": "OrderLineItem",
+          "schema": {
+            "$ref": "#/backend/entities/OrderLineItem"
+          },
+          "description": "Subcollection of order line items for a specific order. Includes denormalized 'customerId' from the parent Order for authorization independence.",
+          "params": [
+            {
+              "name": "orderId",
+              "description": "The unique identifier for the order."
+            },
+            {
+              "name": "orderLineItemId",
+              "description": "The unique identifier for the order line item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/invoices/{invoiceId}",
+        "definition": {
+          "entityName": "Invoice",
+          "schema": {
+            "$ref": "#/backend/entities/Invoice"
+          },
+          "description": "Collection of invoice documents.",
+          "params": [
+            {
+              "name": "invoiceId",
+              "description": "The unique identifier for the invoice."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/returns/{returnId}",
+        "definition": {
+          "entityName": "Return",
+          "schema": {
+            "$ref": "#/backend/entities/Return"
+          },
+          "description": "Collection of return documents.",
+          "params": [
+            {
+              "name": "returnId",
+              "description": "The unique identifier for the return."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/returns/{returnId}/returnLineItems/{returnLineItemId}",
+        "definition": {
+          "entityName": "ReturnLineItem",
+          "schema": {
+            "$ref": "#/backend/entities/ReturnLineItem"
+          },
+          "description": "Subcollection of return line items for a specific return. Includes denormalized 'customerId' from the parent Order (via Return) for authorization independence.",
+          "params": [
+            {
+              "name": "returnId",
+              "description": "The unique identifier for the return."
+            },
+            {
+              "name": "returnLineItemId",
+              "description": "The unique identifier for the return line item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/suppliers/{supplierId}",
+        "definition": {
+          "entityName": "Supplier",
+          "schema": {
+            "$ref": "#/backend/entities/Supplier"
+          },
+          "description": "Collection of supplier documents.",
+          "params": [
+            {
+              "name": "supplierId",
+              "description": "The unique identifier for the supplier."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/purchaseOrders/{purchaseOrderId}",
+        "definition": {
+          "entityName": "PurchaseOrder",
+          "schema": {
+            "$ref": "#/backend/entities/PurchaseOrder"
+          },
+          "description": "Collection of purchase order documents.",
+          "params": [
+            {
+              "name": "purchaseOrderId",
+              "description": "The unique identifier for the purchase order."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}",
+        "definition": {
+          "entityName": "POLineItem",
+          "schema": {
+            "$ref": "#/backend/entities/POLineItem"
+          },
+          "description": "Subcollection of purchase order line items for a specific purchase order.  Includes denormalized 'supplierId' from the parent PurchaseOrder for authorization independence.",
+          "params": [
+            {
+              "name": "purchaseOrderId",
+              "description": "The unique identifier for the purchase order."
+            },
+            {
+              "name": "poLineItemId",
+              "description": "The unique identifier for the purchase order line item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/goodsReceiptNotes/{goodsReceiptNoteId}",
+        "definition": {
+          "entityName": "GoodsReceiptNote",
+          "schema": {
+            "$ref": "#/backend/entities/GoodsReceiptNote"
+          },
+          "description": "Collection of goods receipt note documents.",
+          "params": [
+            {
+              "name": "goodsReceiptNoteId",
+              "description": "The unique identifier for the goods receipt note."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}",
+        "definition": {
+          "entityName": "GRNLineItem",
+          "schema": {
+            "$ref": "#/backend/entities/GRNLineItem"
+          },
+          "description": "Subcollection of goods receipt note line items for a specific goods receipt note. Includes denormalized 'supplierId' from the parent PurchaseOrder (via GoodsReceiptNote) for authorization independence.",
+          "params": [
+            {
+              "name": "goodsReceiptNoteId",
+              "description": "The unique identifier for the goods receipt note."
+            },
+            {
+              "name": "grnLineItemId",
+              "description": "The unique identifier for the goods receipt note line item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/payments/{paymentId}",
+        "definition": {
+          "entityName": "Payment",
+          "schema": {
+            "$ref": "#/backend/entities/Payment"
+          },
+          "description": "Collection of payment documents.",
+          "params": [
+            {
+              "name": "paymentId",
+              "description": "The unique identifier for the payment."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/chartOfAccounts/{chartOfAccountsId}",
+        "definition": {
+          "entityName": "ChartOfAccounts",
+          "schema": {
+            "$ref": "#/backend/entities/ChartOfAccounts"
+          },
+          "description": "Collection of chart of accounts entries.",
+          "params": [
+            {
+              "name": "chartOfAccountsId",
+              "description": "The unique identifier for the chart of accounts entry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/ledgerEntries/{ledgerEntryId}",
+        "definition": {
+          "entityName": "LedgerEntry",
+          "schema": {
+            "$ref": "#/backend/entities/LedgerEntry"
+          },
+          "description": "Collection of ledger entries.",
+          "params": [
+            {
+              "name": "ledgerEntryId",
+              "description": "The unique identifier for the ledger entry."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to support the SynergyFlow ERP system, emphasizing security, scalability, and debuggability. It adheres to Authorization Independence (CRITICAL) by denormalizing authorization data to avoid `get()` calls in security rules, Clarity of Intent (Debuggability) through explicit naming and structure, DBAC (No Custom Claims) using database-stored roles, QAPs (Rules are not Filters) via structural segregation, and Invariants by enforcing data integrity. The structure facilitates simple, robust, and easily debuggable security rules.  User-owned data is stored under `/users/{userId}`. Collaborative data uses Membership Maps. Global roles utilize dedicated collections (e.g., `/roles_admin/{uid}`).\n\nDenormalization is extensively used to ensure authorization independence.  For instance, if access to `FormFields` depends on `Workflow` attributes, these attributes will be copied to `FormFields`. This allows security rules to validate access to `FormFields` without needing to `get()` the `Workflow` document.\n\nStructural segregation ensures that collections contain documents with homogeneous security needs.  For example, public vs. private reports would be stored in separate collections to avoid complex rule logic.\n\nThe structure allows for secure list operations by avoiding the need to filter based on data in the rules.  Access is determined by the document's location and/or the presence of the user's ID in a membership map."
+  }
+}

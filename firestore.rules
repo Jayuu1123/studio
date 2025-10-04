@@ -1,0 +1,323 @@
+/**
+ * @fileoverview Firestore Security Rules for SynergyFlow ERP System.
+ *
+ * Core Philosophy:
+ * This ruleset implements a hybrid security model, combining strict user-ownership for personal data with shared access via membership maps for collaborative data. It prioritizes authorization independence through extensive denormalization, avoiding costly and complex `get()` operations within the rules.
+ *
+ * Data Structure:
+ * - User-specific data (Workflows, FormDefinitions, etc.) is nested under `/users/{userId}`.
+ * - Top-level collections like `/products`, `/categories`, etc., store application-wide data.
+ * - Subcollections (e.g., `/orders/{orderId}/orderLineItems/{orderLineItemId}`) may contain denormalized data from parent documents to enable authorization independence.
+ *
+ * Key Security Decisions:
+ * - All user-specific data enforces strict ownership.
+ * - List operations on user-owned collections are allowed for the owner.
+ * - Top-level collections are generally accessible with owner-only writes *if* an ownership field is present; otherwise write operations are disabled.
+ *
+ * Denormalization for Authorization:
+ * - Where subcollection access depends on parent document properties (e.g., a user's role in a project), the relevant properties are denormalized into the subcollection documents. This avoids using `get()` calls in security rules.
+ *   - Example: `orderLineItems` includes `customerId` from `Order` to authorize `OrderLineItem` operations directly.
+ *
+ * Structural Segregation:
+ * - This ruleset assumes data with differing access control needs is stored in separate collections.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Checks if the request is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the owner of the document.
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the existing owner of the document.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource.data.userId == request.auth.uid;
+    }
+
+    /**
+     * @description Rules for user documents.
+     * @path /users/{userId}
+     * @allow (create) User 'testUser' can create their own user document.
+     * @allow (get, list) User 'testUser' can read their own user document.
+     * @deny (create) User 'otherUser' cannot create a user document with 'testUser's ID.
+     * @deny (update, delete) User 'otherUser' cannot update or delete User 'testUser's document.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    /**
+     * @description Rules for role documents.
+     * @path /roles/{roleId}
+     * @allow (get, list) Anyone can read role documents.
+     * @deny (create, update, delete) No one can create, update, or delete role documents through the client.
+     * @principle Read-only access for role documents.
+     */
+    match /roles/{roleId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for workflows owned by a specific user.
+     * @path /users/{userId}/workflows/{workflowId}
+     * @allow (create) User 'testUser' can create a workflow under their user document.
+     * @allow (get, list) User 'testUser' can read workflows under their user document.
+     * @deny (create) User 'otherUser' cannot create a workflow under User 'testUser's document.
+     * @deny (update, delete) User 'otherUser' cannot update or delete workflows under User 'testUser's document.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/workflows/{workflowId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    /**
+     * @description Rules for workflow steps belonging to a specific workflow.
+     * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
+     * @allow (create) User 'testUser' can create a workflow step under their workflow.
+     * @allow (get, list) User 'testUser' can read workflow steps under their workflow.
+     * @deny (create) User 'otherUser' cannot create a workflow step under User 'testUser's workflow.
+     * @deny (update, delete) User 'otherUser' cannot update or delete workflow steps under User 'testUser's workflow.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    /**
+     * @description Rules for form definitions owned by a specific user.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}
+     * @allow (create) User 'testUser' can create a form definition under their user document.
+     * @allow (get, list) User 'testUser' can read form definitions under their user document.
+     * @deny (create) User 'otherUser' cannot create a form definition under User 'testUser's document.
+     * @deny (update, delete) User 'otherUser' cannot update or delete form definitions under User 'testUser's document.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    /**
+     * @description Rules for form fields belonging to a specific form definition.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
+     * @allow (create) User 'testUser' can create a form field under their form definition.
+     * @allow (get, list) User 'testUser' can read form fields under their form definition.
+     * @deny (create) User 'otherUser' cannot create a form field under User 'testUser's form definition.
+     * @deny (update, delete) User 'otherUser' cannot update or delete form fields under User 'testUser's form definition.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    /**
+     * @description Rules for lookup tables.
+     * @path /lookupTables/{lookupTableId}
+     * @allow (get, list) Anyone can read lookup tables.
+     * @deny (create, update, delete) No one can create, update, or delete lookup tables.
+     */
+    match /lookupTables/{lookupTableId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for MIS reports.
+     * @path /misReports/{misReportId}
+     */
+    match /misReports/{misReportId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for transaction codes.
+     * @path /transactionCodes/{transactionCodeId}
+     */
+    match /transactionCodes/{transactionCodeId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for product documents.
+     * @path /products/{productId}
+     */
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for category documents.
+     * @path /categories/{categoryId}
+     */
+    match /categories/{categoryId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for stock documents.
+     * @path /stocks/{stockId}
+     */
+    match /stocks/{stockId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for customer documents.
+     * @path /customers/{customerId}
+     */
+    match /customers/{customerId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for order documents.
+     * @path /orders/{orderId}
+     */
+    match /orders/{orderId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for order line item documents.
+     * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
+     */
+    match /orders/{orderId}/orderLineItems/{orderLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for invoice documents.
+     * @path /invoices/{invoiceId}
+     */
+    match /invoices/{invoiceId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for return documents.
+     * @path /returns/{returnId}
+     */
+    match /returns/{returnId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for return line item documents.
+     * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
+     */
+    match /returns/{returnId}/returnLineItems/{returnLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for supplier documents.
+     * @path /suppliers/{supplierId}
+     */
+    match /suppliers/{supplierId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for purchase order documents.
+     * @path /purchaseOrders/{purchaseOrderId}
+     */
+    match /purchaseOrders/{purchaseOrderId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for purchase order line item documents.
+     * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
+     */
+    match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for goods receipt note documents.
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for goods receipt note line item documents.
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for payment documents.
+     * @path /payments/{paymentId}
+     */
+    match /payments/{paymentId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for chart of accounts documents.
+     * @path /chartOfAccounts/{chartOfAccountsId}
+     */
+    match /chartOfAccounts/{chartOfAccountsId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Rules for ledger entry documents.
+     * @path /ledgerEntries/{ledgerEntryId}
+     */
+    match /ledgerEntries/{ledgerEntryId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+  }
+}
