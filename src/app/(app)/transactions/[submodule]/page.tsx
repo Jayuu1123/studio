@@ -133,18 +133,18 @@ export default function TransactionSubmodulePage({
                   </TableRow>
               )}
               {!isLoading && transactionEntries?.map((entry) => (
-                <TableRow key={entry.docNo}>
+                <TableRow key={entry.id}>
                   <TableCell>
                     <div className='flex justify-center'>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
-                            <div className={`flex items-center justify-center h-6 w-6 rounded-full ${statusConfig[entry.status].color}`}>
-                               {statusConfig[entry.status].icon ? statusConfig[entry.status].icon : <span className="text-white font-bold text-xs">{entry.status}</span>}
+                            <div className={`flex items-center justify-center h-6 w-6 rounded-full ${statusConfig[entry.status]?.color ?? 'bg-gray-400'}`}>
+                               {statusConfig[entry.status]?.icon ? statusConfig[entry.status].icon : <span className="text-white font-bold text-xs">{entry.status}</span>}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>{statusConfig[entry.status].label}</p>
+                            <p>{statusConfig[entry.status]?.label ?? 'Unknown'}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -152,13 +152,13 @@ export default function TransactionSubmodulePage({
                   </TableCell>
                   <TableCell>
                       <div className="font-medium">{entry.user}</div>
-                      <div className="text-xs text-muted-foreground">{entry.date?.toDate().toLocaleDateString()}</div>
+                      {entry.date && <div className="text-xs text-muted-foreground">{new Date(entry.date?.seconds * 1000).toLocaleDateString()}</div>}
                   </TableCell>
                   <TableCell className="font-medium text-primary hover:underline cursor-pointer">
                     {entry.docNo}
                   </TableCell>
                   <TableCell>{entry.category}</TableCell>
-                  <TableCell>{entry.date?.toDate().toLocaleDateString()}</TableCell>
+                   <TableCell>{entry.date && new Date(entry.date?.seconds * 1000).toLocaleDateString()}</TableCell>
                   <TableCell>{entry.department}</TableCell>
                   <TableCell>{entry.productionItem}</TableCell>
                   <TableCell>

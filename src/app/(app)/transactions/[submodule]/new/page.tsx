@@ -43,6 +43,7 @@ import { collection, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import type { TransactionEntry } from '@/lib/types';
+import React from 'react';
 
 
 export default function NewTransactionEntryPage({
