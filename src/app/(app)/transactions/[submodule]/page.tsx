@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Lock,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,10 @@ import type { TransactionEntry } from '@/lib/types';
 import Link from 'next/link';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, doc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+
 
 const statusConfig: {
   [key: string]: {
@@ -55,13 +59,14 @@ const statusConfig: {
 
 
 export default function TransactionSubmodulePage({
-  params,
+  params: { submodule },
 }: {
   params: { submodule: string };
 }) {
-  const { submodule } = params;
   const submoduleName = unslugify(submodule);
   const firestore = useFirestore();
+  const router = useRouter();
+  const { toast } = useToast();
 
   const entriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -69,6 +74,27 @@ export default function TransactionSubmodulePage({
   }, [firestore, submoduleName]);
 
   const { data: transactionEntries, isLoading } = useCollection<TransactionEntry>(entriesQuery);
+
+  const handleDeleteEntry = (entryId: string) => {
+    if (!firestore) return;
+    const docRef = doc(firestore, 'transactionEntries', entryId);
+    deleteDocumentNonBlocking(docRef);
+    toast({
+      title: 'Entry Deleted',
+      description: 'The transaction entry has been successfully deleted.',
+    });
+  };
+
+  const handleDuplicateEntry = (entry: TransactionEntry) => {
+    // Navigate to the 'new' page with query params to pre-fill the form
+    router.push(`/transactions/${submodule}/new?duplicateId=${entry.id}`);
+  };
+
+  const handleEditEntry = (entry: TransactionEntry) => {
+    // Navigate to the 'new' page but with an 'editId' to indicate editing
+    router.push(`/transactions/${submodule}/new?editId=${entry.id}`);
+  };
+
 
   return (
     <div className="flex flex-col gap-4">
@@ -155,7 +181,7 @@ export default function TransactionSubmodulePage({
                       <div className="font-medium">{entry.user}</div>
                       {entry.date && <div className="text-xs text-muted-foreground">{new Date(entry.date?.seconds * 1000).toLocaleDateString()}</div>}
                   </TableCell>
-                  <TableCell className="font-medium text-primary hover:underline cursor-pointer">
+                  <TableCell className="font-medium text-primary hover:underline cursor-pointer" onClick={() => handleEditEntry(entry)}>
                     {entry.docNo}
                   </TableCell>
                   <TableCell>{entry.category}</TableCell>
@@ -176,9 +202,12 @@ export default function TransactionSubmodulePage({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-500">
+                        <DropdownMenuItem onClick={() => handleEditEntry(entry)}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDuplicateEntry(entry)}>Duplicate</DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-red-500"
+                          onClick={() => entry.id && handleDeleteEntry(entry.id)}
+                        >
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>

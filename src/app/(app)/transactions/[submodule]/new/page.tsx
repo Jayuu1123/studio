@@ -37,25 +37,60 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { unslugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
-import { useFirestore } from '@/firebase';
-import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-import { collection, serverTimestamp, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { TransactionEntry } from '@/lib/types';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 
 export default function NewTransactionEntryPage({
-  params,
+  params: { submodule },
 }: {
   params: { submodule: string };
 }) {
-  const { submodule } = params;
   const submoduleName = unslugify(submodule);
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const duplicateId = searchParams.get('duplicateId');
+  const editId = searchParams.get('editId');
+  
+  const [formData, setFormData] = useState<Partial<TransactionEntry>>({
+      category: 'Requisition',
+      department: 'Store',
+      productionItem: 'N/A',
+      user: 'Current User',
+      status: 'P',
+  });
+  
+  const docToLoadRef = useMemoFirebase(() => {
+    if (!firestore || (!duplicateId && !editId)) return null;
+    const id = duplicateId || editId;
+    return doc(firestore, 'transactionEntries', id!);
+  }, [firestore, duplicateId, editId]);
+
+  const { data: loadedEntry, isLoading: isLoadingEntry } = useDoc<TransactionEntry>(docToLoadRef);
+
+  useEffect(() => {
+    if (loadedEntry) {
+        const dataToLoad = { ...loadedEntry };
+        if (duplicateId) {
+            // If duplicating, clear out fields that should be new
+            delete dataToLoad.id;
+            delete dataToLoad.docNo;
+            delete dataToLoad.docNo_sequential;
+            dataToLoad.status = 'P'; // Reset status
+        }
+        if (dataToLoad.date && dataToLoad.date instanceof Timestamp) {
+            dataToLoad.date = dataToLoad.date.toDate();
+        }
+        setFormData(dataToLoad);
+    }
+  }, [loadedEntry, duplicateId]);
 
 
   const handleSaveEntry = async () => {
@@ -65,45 +100,60 @@ export default function NewTransactionEntryPage({
     }
     
     const entriesCollection = collection(firestore, 'transactionEntries');
+    
+    if (editId) {
+        // Update existing document
+        const docRef = doc(firestore, 'transactionEntries', editId);
+        const updatedData = {
+            ...formData,
+            date: formData.date ? Timestamp.fromDate(new Date(formData.date)) : serverTimestamp(),
+        };
+        setDocumentNonBlocking(docRef, updatedData, { merge: true });
+        toast({
+            title: 'Entry Updated',
+            description: `Entry ${formData.docNo} has been updated.`,
+        });
+    } else {
+        // Create new document
+        const q = query(
+          entriesCollection,
+          where('submodule', '==', submoduleName),
+          orderBy('docNo_sequential', 'desc'),
+          limit(1)
+        );
 
-    // 1. Find the latest document number for the current submodule
-    const q = query(
-      entriesCollection,
-      where('submodule', '==', submoduleName),
-      orderBy('docNo_sequential', 'desc'),
-      limit(1)
-    );
+        const querySnapshot = await getDocs(q);
+        let nextDocNo = 1;
+        if (!querySnapshot.empty) {
+          const latestEntry = querySnapshot.docs[0].data() as TransactionEntry;
+          nextDocNo = (latestEntry.docNo_sequential || 0) + 1;
+        }
 
-    const querySnapshot = await getDocs(q);
-    let nextDocNo = 1;
-    if (!querySnapshot.empty) {
-      const latestEntry = querySnapshot.docs[0].data() as TransactionEntry;
-      nextDocNo = (latestEntry.docNo_sequential || 0) + 1;
+        const newEntry: Omit<TransactionEntry, 'id'> = {
+            ...(formData as Omit<TransactionEntry, 'id'>),
+            submodule: submoduleName,
+            docNo: `tic/25-26/${nextDocNo}`,
+            docNo_sequential: nextDocNo,
+            date: formData.date ? Timestamp.fromDate(new Date(formData.date)) : serverTimestamp(),
+        };
+        
+        addDocumentNonBlocking(entriesCollection, newEntry);
+        
+        toast({
+            title: 'Entry Saved',
+            description: `New entry for ${submoduleName} has been saved with Doc No: ${newEntry.docNo}`,
+        });
     }
-
-    // 2. Create the new entry with the next sequential number
-    const newEntry: Omit<TransactionEntry, 'id'> = {
-        submodule: submoduleName,
-        status: 'P',
-        user: 'Current User', // Placeholder
-        docNo: `tic/25-26/${nextDocNo}`,
-        docNo_sequential: nextDocNo,
-        category: 'Requisition', // Placeholder
-        date: serverTimestamp(),
-        department: 'Store', // Placeholder
-        productionItem: 'N/A' // Placeholder
-    };
-    
-    // 3. Save the new entry (non-blocking)
-    addDocumentNonBlocking(entriesCollection, newEntry);
-    
-    toast({
-        title: 'Entry Saved',
-        description: `New entry for ${submoduleName} has been saved with Doc No: ${newEntry.docNo}`,
-    });
-
     router.push(`/transactions/${submodule}`);
   };
+
+  const handleInputChange = (field: keyof TransactionEntry, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  if (isLoadingEntry) {
+    return <div>Loading entry...</div>
+  }
 
   return (
     <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
@@ -115,7 +165,7 @@ export default function NewTransactionEntryPage({
           </Link>
         </Button>
         <h1 className="flex-1 shrink-0 whitespace-nowrap text-xl font-semibold font-headline tracking-tight sm:grow-0">
-          New {submoduleName} Entry
+          {editId ? `Edit ${submoduleName} Entry` : duplicateId ? `Duplicate ${submoduleName} Entry` : `New ${submoduleName} Entry`}
         </h1>
 
         <div className="hidden items-center gap-2 md:ml-auto md:flex">
@@ -145,7 +195,7 @@ export default function NewTransactionEntryPage({
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="grid gap-3">
                   <Label htmlFor="category">Category</Label>
-                  <Select>
+                  <Select value={formData.category} onValueChange={(v) => handleInputChange('category', v)}>
                     <SelectTrigger id="category">
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
@@ -157,11 +207,11 @@ export default function NewTransactionEntryPage({
                 </div>
                 <div className="grid gap-3">
                     <Label htmlFor="doc-date">Doc Date</Label>
-                    <DatePicker />
+                    <DatePicker date={formData.date ? new Date(formData.date) : undefined} setDate={(d) => handleInputChange('date', d)} />
                 </div>
                 <div className="grid gap-3">
                   <Label htmlFor="department">Department</Label>
-                   <Select>
+                   <Select value={formData.department} onValueChange={(v) => handleInputChange('department', v)}>
                     <SelectTrigger id="department">
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
@@ -175,11 +225,12 @@ export default function NewTransactionEntryPage({
                 </div>
                 <div className="grid gap-3">
                   <Label htmlFor="production-item">Production Item</Label>
-                  <Select>
+                  <Select value={formData.productionItem} onValueChange={(v) => handleInputChange('productionItem', v)}>
                     <SelectTrigger id="production-item">
                       <SelectValue placeholder="Select item" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="N/A">N/A</SelectItem>
                       <SelectItem value="item-1">Item 1</SelectItem>
                       <SelectItem value="item-2">Item 2</SelectItem>
                     </SelectContent>
@@ -187,7 +238,7 @@ export default function NewTransactionEntryPage({
                 </div>
                  <div className="grid gap-3">
                   <Label htmlFor="requisition-by">Requisition By</Label>
-                  <Input id="requisition-by" defaultValue="RATAN" />
+                  <Input id="requisition-by" value={formData.user} onChange={(e) => handleInputChange('user', e.target.value)} />
                 </div>
                 <div className="grid gap-3">
                   <Label htmlFor="job-no">Job No</Label>
@@ -259,22 +310,23 @@ export default function NewTransactionEntryPage({
               <div className="grid gap-6">
                 <div className="grid gap-3">
                     <Label>URN</Label>
-                    <p className="text-sm font-medium text-muted-foreground">SRQ02001005000309</p>
+                    <p className="text-sm font-medium text-muted-foreground">{formData.id || 'SRQ02001005000309'}</p>
                 </div>
                 <div className="grid gap-3">
                     <Label>Doc No</Label>
-                    <p className="text-sm font-medium text-muted-foreground">TIC/25-26/730</p>
+                    <p className="text-sm font-medium text-muted-foreground">{formData.docNo || 'TIC/25-26/XXX'}</p>
                 </div>
                 <div className="grid gap-3">
                     <Label htmlFor="status">Status</Label>
-                    <Select defaultValue="approved">
+                    <Select value={formData.status} onValueChange={(v) => handleInputChange('status', v)} disabled={!editId}>
                         <SelectTrigger id="status" aria-label="Select status">
                         <SelectValue placeholder="Select status" />
                         </SelectTrigger>
                         <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="denied">Denied</SelectItem>
+                        <SelectItem value="P">Pending</SelectItem>
+                        <SelectItem value="A">Approved</SelectItem>
+                        <SelectItem value="D">Denied</SelectItem>
+                        <SelectItem value="L">Locked</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -292,5 +344,3 @@ export default function NewTransactionEntryPage({
     </div>
   );
 }
-
-    
