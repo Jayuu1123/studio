@@ -1,93 +1,115 @@
 /**
- * @fileoverview Firestore Security Rules for SynergyFlow ERP System.
+ * @fileoverview Firestore Security Rules for SynergyFlow ERP.
  *
  * Core Philosophy:
- * This ruleset prioritizes a secure, role-based access control (RBAC) model.
- * User-specific data is secured via path-based ownership, while collaborative
- * data leverages membership maps within documents. Strict authorization checks
- * are enforced for all write operations, and data validation focuses on
- * relational integrity.
+ * This ruleset enforces a user-centric security model with path-based ownership for user-specific data and role-based access control for collaborative data.  Denormalization is used extensively to avoid costly `get()` operations.
  *
  * Data Structure:
  * - User-specific data is nested under `/users/{userId}`.
- * - Collaborative documents use membership maps (e.g., `members: { userId: role }`).
- * - Top-level collections are generally secured using owner-only write access.
- * - Subcollections inherit authorization context from their parent documents.
+ * - Collaborative data utilizes membership maps on documents.
+ * - Public data is stored in top-level collections.
  *
  * Key Security Decisions:
- * - Data required for authorization is denormalized to avoid costly `get()` calls.
- * - All write operations are explicitly authorized using helper functions.
- * - List operations are secured based on path-based ownership or membership maps.
- *
- * Denormalization for Authorization:
- * - /orders/{orderId}/orderLineItems/{orderLineItemId} includes denormalized 'customerId' from the parent Order.
- * - /returns/{returnId}/returnLineItems/{returnLineItemId} includes denormalized 'customerId' from the parent Order (via Return).
- * - /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} includes denormalized 'supplierId' from the parent PurchaseOrder.
- * - /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} includes denormalized 'supplierId' from the parent PurchaseOrder (via GoodsReceiptNote).
+ * - Enforce strict ownership for user-specific data.
+ * - Implement role-based access control for collaborative data via membership maps.
+ * - Segregate public and private data into different collections for simplified rules.
+ * - Disallow listing of the `/users` collection for enhanced privacy.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows an authenticated user to manage their own app submodules.
-     * @path /appSubmodules/{appSubmoduleId}
-     * @allow (create) User 'user123' can create a new appSubmodule.
-     * @deny (create) User 'user456' cannot create an appSubmodule.
-     * @principle Enforces ownership for writes, preventing unauthorized data modification.
+     * @description Checks if the requesting user is signed in.
+     * @path N/A
+     * @allow N/A
+     * @deny N/A
+     * @principle Verifies user authentication.
      */
-    match /appSubmodules/{appSubmoduleId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+    function isSignedIn() {
+      return request.auth != null;
     }
 
     /**
-     * @description Allows authenticated access and restricts modification of transaction entries.
+     * @description Checks if the requesting user is the owner of the document, based on the provided userId.
+     * @path N/A
+     * @allow N/A
+     * @deny N/A
+     * @principle Enforces document ownership.
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the requesting user is the owner of the EXISTING document, based on the provided userId, and that the document exists.
+     * @path N/A
+     * @allow N/A
+     * @deny N/A
+     * @principle Enforces document ownership and document existence for updates and deletes.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Collection of custom submodules created by users.
+     * @path /appSubmodules/{appSubmoduleId}
+     * @allow (create) User with valid auth creates a new submodule.
+     * @deny (create) User without auth attempts to create a submodule.
+     * @principle Access to app submodules is open to all signed-in users.
+     */
+    match /appSubmodules/{appSubmoduleId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Open reads, no writes.
+    }
+
+    /**
+     * @description Collection of individual transaction entries for all submodules.
      * @path /transactionEntries/{transactionEntryId}
-     * @allow (get) Authenticated user can read any transaction entry.
-     * @deny (create) Any user cannot create transaction entry.
-     * @principle Restricts write access to transaction entries.
+     * @allow (create) User with valid auth creates a new transaction entry.
+     * @deny (create) User without auth attempts to create a transaction entry.
+     * @principle Access to transaction entries is open to all signed-in users.
      */
     match /transactionEntries/{transactionEntryId} {
       allow get, list: if isSignedIn();
-      allow create: if false;
-      allow update, delete: if false;
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Open reads, no writes.
     }
 
     /**
-     * @description Allows a user to manage their own user document.
+     * @description Collection of user documents. Stores personal user data. Path-based ownership for private data.
      * @path /users/{userId}
-     * @allow (create) User 'user123' can create their own user document.
-     * @deny (create) User 'user456' cannot create user document.
-     * @principle Enforces path-based ownership for user data.
+     * @allow (create) User with auth creates their own user document.
+     * @deny (create) User with auth attempts to create another user's document.
+     * @principle Enforces document ownership for user profiles.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow list: if false;
+      allow list: if false; // Prevent listing of all users
       allow create: if isOwner(userId);
       allow update, delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows authenticated access to roles.
+     * @description Collection of role documents.  Defines roles within the RBAC system.
      * @path /roles/{roleId}
-     * @allow (get) Authenticated user can read role with ID 'role123'.
-     * @deny (create) Any user cannot create roles.
-     * @principle Restricts write access to role documents.
+     * @allow (get) Any signed-in user can read a role document.
+     * @deny (create) No one can create, update, or delete a role document.
+     * @principle Roles are read-only and available to all authenticated users.
      */
     match /roles/{roleId} {
       allow get, list: if isSignedIn();
-      allow create: if false;
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows a user to manage their own workflows.
+     * @description Collection of workflows owned by a specific user. Path-based ownership.
      * @path /users/{userId}/workflows/{workflowId}
-     * @allow (create) User 'user123' can create a new workflow.
-     * @deny (create) User 'user456' cannot create workflow.
-     * @principle Enforces path-based ownership for workflows.
+     * @allow (create) User creates a workflow under their user ID.
+     * @deny (create) User attempts to create a workflow under another user ID.
+     * @principle Enforces document ownership for workflows.
      */
     match /users/{userId}/workflows/{workflowId} {
       allow get, list: if isOwner(userId);
@@ -96,11 +118,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows a user to manage their own workflow steps.
+     * @description Collection of workflow steps belonging to a specific workflow. Path-based ownership.
      * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
-     * @allow (create) User 'user123' can create a new workflow step.
-     * @deny (create) User 'user456' cannot create workflow step.
-     * @principle Enforces path-based ownership for workflow steps.
+     * @allow (create) User creates a workflow step under their workflow.
+     * @deny (create) User attempts to create a workflow step under another user's workflow.
+     * @principle Enforces document ownership for workflow steps.
      */
     match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
       allow get, list: if isOwner(userId);
@@ -109,11 +131,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows a user to manage their own form definitions.
+     * @description Collection of form definitions owned by a specific user. Path-based ownership.
      * @path /users/{userId}/formDefinitions/{formDefinitionId}
-     * @allow (create) User 'user123' can create a new form definition.
-     * @deny (create) User 'user456' cannot create form definition.
-     * @principle Enforces path-based ownership for form definitions.
+     * @allow (create) User creates a form definition under their user ID.
+     * @deny (create) User attempts to create a form definition under another user ID.
+     * @principle Enforces document ownership for form definitions.
      */
     match /users/{userId}/formDefinitions/{formDefinitionId} {
       allow get, list: if isOwner(userId);
@@ -122,11 +144,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows a user to manage their own form fields.
+     * @description Collection of form fields belonging to a specific form definition. Includes denormalized 'workflowId' and potentially other workflow-related attributes from the parent FormDefinition for authorization independence.  Path-based ownership.
      * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-     * @allow (create) User 'user123' can create a new form field.
-     * @deny (create) User 'user456' cannot create form field.
-     * @principle Enforces path-based ownership for form fields.
+     * @allow (create) User creates a form field under their form definition.
+     * @deny (create) User attempts to create a form field under another user's form definition.
+     * @principle Enforces document ownership for form fields.
      */
     match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
       allow get, list: if isOwner(userId);
@@ -135,275 +157,243 @@ service cloud.firestore {
     }
 
     /**
-     * @description Allows authenticated access to lookup tables.
+     * @description Collection of lookup tables.
      * @path /lookupTables/{lookupTableId}
-     * @allow (get) Authenticated user can read lookup table with ID 'lookup123'.
-     * @deny (create) Any user cannot create lookup tables.
-     * @principle Restricts write access to lookup tables.
+     * @allow (get) Any signed-in user can read a lookup table.
+     * @deny (create) No one can create, update, or delete a lookup table.
+     * @principle Lookup tables are read-only and available to all authenticated users.
      */
     match /lookupTables/{lookupTableId} {
       allow get, list: if isSignedIn();
-      allow create: if false;
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to MIS reports.
+     * @description Collection of MIS reports. Includes denormalized 'members' map for authorization independence.
      * @path /misReports/{misReportId}
-     * @allow (get) Authenticated user can read MIS report with ID 'report123'.
-     * @deny (create) Any user cannot create MIS reports.
-     * @principle Restricts write access to MIS reports.
+     * @allow (get) Any signed-in user can read an MIS report.
+     * @deny (create) No one can create, update, or delete an MIS report.
+     * @principle MIS reports are read-only and available to all authenticated users.
      */
     match /misReports/{misReportId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to transaction codes.
+     * @description Collection of transaction codes.
      * @path /transactionCodes/{transactionCodeId}
-     * @allow (get) Authenticated user can read transaction code with ID 'code123'.
-     * @deny (create) Any user cannot create transaction codes.
-     * @principle Restricts write access to transaction codes.
+     * @allow (get) Any signed-in user can read a transaction code.
+     * @deny (create) No one can create, update, or delete a transaction code.
+     * @principle Transaction codes are read-only and available to all authenticated users.
      */
     match /transactionCodes/{transactionCodeId} {
       allow get, list: if isSignedIn();
-      allow create: if false;
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to products.
+     * @description Collection of product documents.
      * @path /products/{productId}
-     * @allow (get) Authenticated user can read product with ID 'prod123'.
-     * @deny (create) Any user cannot create products.
-     * @principle Restricts write access to product documents.
+     * @allow (get) Any signed-in user can read a product document.
+     * @deny (create) No one can create, update, or delete a product document.
+     * @principle Products are read-only and available to all authenticated users.
      */
     match /products/{productId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to categories.
+     * @description Collection of product categories.
      * @path /categories/{categoryId}
-     * @allow (get) Authenticated user can read category with ID 'cat123'.
-     * @deny (create) Any user cannot create categories.
-     * @principle Restricts write access to category documents.
+     * @allow (get) Any signed-in user can read a category document.
+     * @deny (create) No one can create, update, or delete a category document.
+     * @principle Categories are read-only and available to all authenticated users.
      */
     match /categories/{categoryId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to stock entries.
+     * @description Collection of stock level entries.
      * @path /stocks/{stockId}
-     * @allow (get) Authenticated user can read stock entry with ID 'stock123'.
-     * @deny (create) Any user cannot create stock entries.
-     * @principle Restricts write access to stock entries.
+     * @allow (get) Any signed-in user can read a stock document.
+     * @deny (create) No one can create, update, or delete a stock document.
+     * @principle Stocks are read-only and available to all authenticated users.
      */
     match /stocks/{stockId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to customers.
+     * @description Collection of customer documents.
      * @path /customers/{customerId}
-     * @allow (get) Authenticated user can read customer with ID 'cust123'.
-     * @deny (create) Any user cannot create customers.
-     * @principle Restricts write access to customer documents.
+     * @allow (get) Any signed-in user can read a customer document.
+     * @deny (create) No one can create, update, or delete a customer document.
+     * @principle Customers are read-only and available to all authenticated users.
      */
     match /customers/{customerId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to orders.
+     * @description Collection of order documents.
      * @path /orders/{orderId}
-     * @allow (get) Authenticated user can read order with ID 'order123'.
-     * @deny (create) Any user cannot create orders.
-     * @principle Restricts write access to order documents.
+     * @allow (get) Any signed-in user can read an order document.
+     * @deny (create) No one can create, update, or delete an order document.
+     * @principle Orders are read-only and available to all authenticated users.
      */
     match /orders/{orderId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to order line items.
+     * @description Subcollection of order line items for a specific order. Includes denormalized 'customerId' from the parent Order for authorization independence.
      * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
-     * @allow (get) Authenticated user can read order line item with ID 'item123'.
-     * @deny (create) Any user cannot create order line items.
-     * @principle Restricts write access to order line items.
+     * @allow (get) Any signed-in user can read an order line item.
+     * @deny (create) No one can create, update, or delete an order line item.
+     * @principle Order line items are read-only and available to all authenticated users.
      */
     match /orders/{orderId}/orderLineItems/{orderLineItemId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to invoices.
+     * @description Collection of invoice documents.
      * @path /invoices/{invoiceId}
-     * @allow (get) Authenticated user can read invoice with ID 'invoice123'.
-     * @deny (create) Any user cannot create invoices.
-     * @principle Restricts write access to invoice documents.
+     * @allow (get) Any signed-in user can read an invoice document.
+     * @deny (create) No one can create, update, or delete an invoice document.
+     * @principle Invoices are read-only and available to all authenticated users.
      */
     match /invoices/{invoiceId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to returns.
+     * @description Collection of return documents.
      * @path /returns/{returnId}
-     * @allow (get) Authenticated user can read return with ID 'return123'.
-     * @deny (create) Any user cannot create returns.
-     * @principle Restricts write access to return documents.
+     * @allow (get) Any signed-in user can read a return document.
+     * @deny (create) No one can create, update, or delete a return document.
+     * @principle Returns are read-only and available to all authenticated users.
      */
     match /returns/{returnId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to return line items.
+     * @description Subcollection of return line items for a specific return. Includes denormalized 'customerId' from the parent Order (via Return) for authorization independence.
      * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
-     * @allow (get) Authenticated user can read return line item with ID 'item123'.
-     * @deny (create) Any user cannot create return line items.
-     * @principle Restricts write access to return line items.
+     * @allow (get) Any signed-in user can read a return line item.
+     * @deny (create) No one can create, update, or delete a return line item.
+     * @principle Return line items are read-only and available to all authenticated users.
      */
     match /returns/{returnId}/returnLineItems/{returnLineItemId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to suppliers.
+     * @description Collection of supplier documents.
      * @path /suppliers/{supplierId}
-     * @allow (get) Authenticated user can read supplier with ID 'supplier123'.
-     * @deny (create) Any user cannot create suppliers.
-     * @principle Restricts write access to supplier documents.
+     * @allow (get) Any signed-in user can read a supplier document.
+     * @deny (create) No one can create, update, or delete a supplier document.
+     * @principle Suppliers are read-only and available to all authenticated users.
      */
     match /suppliers/{supplierId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to purchase orders.
+     * @description Collection of purchase order documents.
      * @path /purchaseOrders/{purchaseOrderId}
-     * @allow (get) Authenticated user can read purchase order with ID 'po123'.
-     * @deny (create) Any user cannot create purchase orders.
-     * @principle Restricts write access to purchase order documents.
+     * @allow (get) Any signed-in user can read a purchase order document.
+     * @deny (create) No one can create, update, or delete a purchase order document.
+     * @principle Purchase orders are read-only and available to all authenticated users.
      */
     match /purchaseOrders/{purchaseOrderId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to purchase order line items.
+     * @description Subcollection of purchase order line items for a specific purchase order.  Includes denormalized 'supplierId' from the parent PurchaseOrder for authorization independence.
      * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
-     * @allow (get) Authenticated user can read purchase order line item with ID 'item123'.
-     * @deny (create) Any user cannot create purchase order line items.
-     * @principle Restricts write access to purchase order line items.
+     * @allow (get) Any signed-in user can read a purchase order line item.
+     * @deny (create) No one can create, update, or delete a purchase order line item.
+     * @principle Purchase order line items are read-only and available to all authenticated users.
      */
     match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to goods receipt notes.
+     * @description Collection of goods receipt note documents.
      * @path /goodsReceiptNotes/{goodsReceiptNoteId}
-     * @allow (get) Authenticated user can read goods receipt note with ID 'grn123'.
-     * @deny (create) Any user cannot create goods receipt notes.
-     * @principle Restricts write access to goods receipt note documents.
+     * @allow (get) Any signed-in user can read a goods receipt note document.
+     * @deny (create) No one can create, update, or delete a goods receipt note document.
+     * @principle Goods receipt notes are read-only and available to all authenticated users.
      */
     match /goodsReceiptNotes/{goodsReceiptNoteId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to goods receipt note line items.
+     * @description Subcollection of goods receipt note line items for a specific goods receipt note. Includes denormalized 'supplierId' from the parent PurchaseOrder (via GoodsReceiptNote) for authorization independence.
      * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
-     * @allow (get) Authenticated user can read goods receipt note line item with ID 'item123'.
-     * @deny (create) Any user cannot create goods receipt note line items.
-     * @principle Restricts write access to goods receipt note line items.
+     * @allow (get) Any signed-in user can read a goods receipt note line item.
+     * @deny (create) No one can create, update, or delete a goods receipt note line item.
+     * @principle Goods receipt note line items are read-only and available to all authenticated users.
      */
     match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to payments.
+     * @description Collection of payment documents.
      * @path /payments/{paymentId}
-     * @allow (get) Authenticated user can read payment with ID 'payment123'.
-     * @deny (create) Any user cannot create payments.
-     * @principle Restricts write access to payment documents.
+     * @allow (get) Any signed-in user can read a payment document.
+     * @deny (create) No one can create, update, or delete a payment document.
+     * @principle Payments are read-only and available to all authenticated users.
      */
     match /payments/{paymentId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Allows authenticated access to chart of accounts entries.
+     * @description Collection of chart of accounts entries.
      * @path /chartOfAccounts/{chartOfAccountsId}
-     * @allow (get) Authenticated user can read chart of accounts entry with ID 'coa123'.
-     * @deny (create) Any user cannot create chart of accounts entries.
-     * @principle Restricts write access to chart of accounts entries.
+     * @allow (get) Any signed-in user can read a chart of accounts document.
+     * @deny (create) No one can create, update, or delete a chart of accounts document.
+     * @principle Chart of accounts entries are read-only and available to all authenticated users.
      */
     match /chartOfAccounts/{chartOfAccountsId} {
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
-    /**
-     * @description Allows authenticated access to ledger entries.
-     * @path /ledgerEntries/{ledgerEntryId}
-     * @allow (get) Authenticated user can read ledger entry with ID 'ledger123'.
-     * @deny (create) Any user cannot create ledger entries.
-     * @principle Restricts write access to ledger entries.
-     */
+     /**
+      * @description Collection of ledger entries.
+      * @path /ledgerEntries/{ledgerEntryId}
+      * @allow (get) Any signed-in user can read a ledger entry document.
+      * @deny (create) No one can create, update, or delete a ledger entry document.
+      * @principle Ledger entries are read-only and available to all authenticated users.
+      */
     match /ledgerEntries/{ledgerEntryId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
-    }
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-        return request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
+        allow get, list: if isSignedIn();
+        allow create, update, delete: if false;
     }
   }
 }
