@@ -1,409 +1,518 @@
 /**
-  * @description This ruleset enforces a strict user-ownership model for user-specific data and employs denormalization to maintain authorization independence, enhancing security and performance.
-  * @dataStructure Data is organized hierarchically, with user-specific data nested under `/users/{userId}`. Collaborative access is managed using membership maps on documents.
-  * @keySecurityDecisions Public listing is disabled for all collections containing user-specific data. Write access is strictly controlled based on ownership or membership. Denormalization avoids costly `get()` calls.
-  */
- 
-
- rules_version = '2';
- service cloud.firestore {
+ * @fileOverview Firestore Security Rules for SynergyFlow ERP.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a hybrid security model. User-specific data is strictly controlled via ownership checks,
+ * while other collections are generally open for reading but require authentication for writes.  This setup prioritizes
+ * a secure-by-default posture, with the understanding that specific collections might require further refinement later.
+ *
+ * Data Structure:
+ * The Firestore database is organized into top-level collections and user-scoped subcollections under `/users/{userId}`.
+ * Subcollections are used to represent one-to-many relationships (e.g., a user's workflows).  Authorization Independence is enforced with denormalized data.
+ *
+ * Key Security Decisions:
+ * - **User Listing Disabled**: Listing all users is not permitted.
+ * - **Ownership**: User-specific data under `/users/{userId}` is accessible only to the authenticated user with a matching UID.
+ * - **Public Read, Authenticated Write Default**: Top-level collections allow public read access but require authentication for any write operations.
+ * - **Denormalization**: Key authorization data (e.g., user roles, workflow IDs) may be copied to child documents to ensure rules can be evaluated without additional `get()` calls.
+ */
+rules_version = '2';
+service cloud.firestore {
   match /databases/{database}/documents {
- 
 
-   /**
-    * @description Allows anyone to read the appSubmodules collection, but restricts writes to authenticated users.
-    * @path /appSubmodules/{appSubmoduleId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, owner-only writes, authenticated users.
-    */
-   match /appSubmodules/{appSubmoduleId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
-   }
- 
+    /**
+     * @description Checks if the request is authenticated.
+     * @returns {boolean} True if the user is signed in, false otherwise.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-   /**
-    * @description Allows a user to read and write their own user document.
-    * @path /users/{userId}
-    * @allow (get, list): if isOwner(userId)
-    * @allow (create): if isOwner(userId)
-    * @allow (update, delete): if isExistingOwner(userId)
-    * @deny (create): if !isOwner(userId)
-    * @deny (update, delete): if !isExistingOwner(userId)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId} {
-    allow get, list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update, delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Checks if the authenticated user ID matches the provided user ID.
+     * @param {string} userId - The user ID to compare against.
+     * @returns {boolean} True if the user is the owner, false otherwise.
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
 
-   /**
-    * @description Allows anyone to read the roles collection, but restricts writes.
-    * @path /roles/{roleId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /roles/{roleId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for roles collection.
-   }
- 
+    /**
+     * @description Checks if the authenticated user ID matches the existing document's owner ID. Also validates the document exists.
+     * @param {string} userId - The user ID to compare against the document's owner ID.
+     * @returns {boolean} True if the user is the owner and the resource exists, false otherwise.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+   
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting app submodules.
+     * @path /appSubmodules/{appSubmoduleId}
+     * @allow (get, list): Any user can read or list app submodules.
+     * @allow (create): An authenticated user can create an app submodule.
+     * @allow (update, delete): Only an authenticated user can update or delete an app submodule.
+     * @deny (create): An unauthenticated user cannot create an app submodule.
+     * @deny (update, delete): An unauthenticated user cannot update or delete an app submodule.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /appSubmodules/{appSubmoduleId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows a user to read and write their own workflows.
-    * @path /users/{userId}/workflows/{workflowId}
-    * @allow (get, list): if isOwner(userId)
-    * @allow (create): if isOwner(userId)
-    * @allow (update, delete): if isExistingOwner(userId)
-    * @deny (create): if !isOwner(userId)
-    * @deny (update, delete): if !isExistingOwner(userId)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/workflows/{workflowId} {
-    allow get, list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update, delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Grants access to user-specific data only to the authenticated user with a matching UID.
+     * @path /users/{userId}
+     * @allow (get, list): Only the user with the matching userId can read or list their own user document.
+     * @allow (create): A user can create their own user document if the userId matches their auth.uid.
+     * @allow (update, delete): Only the user with the matching userId can update or delete their own user document, after the document exists.
+     * @deny (get, list): Any user cannot read or list other users' documents.
+     * @deny (create): A user cannot create a user document with a userId that does not match their auth.uid.
+     * @deny (update, delete): Any user cannot update or delete other users' documents.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // User listing is disabled for privacy.
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Allows a user to read and write their own workflow steps.
-    * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
-    * @allow (get, list): if isOwner(userId)
-    * @allow (create): if isOwner(userId)
-    * @allow (update, delete): if isExistingOwner(userId)
-    * @deny (create): if !isOwner(userId)
-    * @deny (update, delete): if !isExistingOwner(userId)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
-    allow get, list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update, delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting roles.
+     * @path /roles/{roleId}
+     * @allow (get, list): Any user can read or list roles.
+     * @allow (create): An authenticated user can create a role.
+     * @allow (update, delete): Only an authenticated user can update or delete a role.
+     * @deny (create): An unauthenticated user cannot create a role.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a role.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /roles/{roleId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows a user to read and write their own form definitions.
-    * @path /users/{userId}/formDefinitions/{formDefinitionId}
-    * @allow (get, list): if isOwner(userId)
-    * @allow (create): if isOwner(userId)
-    * @allow (update, delete): if isExistingOwner(userId)
-    * @deny (create): if !isOwner(userId)
-    * @deny (update, delete): if !isExistingOwner(userId)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/formDefinitions/{formDefinitionId} {
-    allow get, list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update, delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Grants access to workflows only to the authenticated user with a matching userId.
+     * @path /users/{userId}/workflows/{workflowId}
+     * @allow (get, list): Only the user with the matching userId can read or list their workflows.
+     * @allow (create): Only the user with the matching userId can create a workflow.
+     * @allow (update, delete): Only the user with the matching userId can update or delete their workflows, after it exists.
+     * @deny (get, list): Any user cannot read or list other users' workflows.
+     * @deny (create): A user cannot create a workflow with a userId that does not match their auth.uid.
+     * @deny (update, delete): Any user cannot update or delete other users' workflows.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId}/workflows/{workflowId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Allows a user to read and write their own form fields.
-    * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-    * @allow (get, list): if isOwner(userId)
-    * @allow (create): if isOwner(userId)
-    * @allow (update, delete): if isExistingOwner(userId)
-    * @deny (create): if !isOwner(userId)
-    * @deny (update, delete): if !isExistingOwner(userId)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
-    allow get, list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update, delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Grants access to workflow steps only to the authenticated user with a matching userId.
+     * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
+     * @allow (get, list): Only the user with the matching userId can read or list their workflow steps.
+     * @allow (create): Only the user with the matching userId can create a workflow step.
+     * @allow (update, delete): Only the user with the matching userId can update or delete their workflow steps, after it exists.
+     * @deny (get, list): Any user cannot read or list other users' workflow steps.
+     * @deny (create): A user cannot create a workflow step with a userId that does not match their auth.uid.
+     * @deny (update, delete): Any user cannot update or delete other users' workflow steps.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Allows anyone to read the lookupTables collection, but restricts writes.
-    * @path /lookupTables/{lookupTableId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /lookupTables/{lookupTableId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for lookup tables.
-   }
- 
+    /**
+     * @description Grants access to form definitions only to the authenticated user with a matching userId.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}
+     * @allow (get, list): Only the user with the matching userId can read or list their form definitions.
+     * @allow (create): Only the user with the matching userId can create a form definition.
+     * @allow (update, delete): Only the user with the matching userId can update or delete their form definitions, after it exists.
+     * @deny (get, list): Any user cannot read or list other users' form definitions.
+     * @deny (create): A user cannot create a form definition with a userId that does not match their auth.uid.
+     * @deny (update, delete): Any user cannot update or delete other users' form definitions.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Allows anyone to read the misReports collection, but restricts writes.
-    * @path /misReports/{misReportId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /misReports/{misReportId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for misReports.
-   }
- 
+    /**
+     * @description Grants access to form fields only to the authenticated user with a matching userId.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
+     * @allow (get, list): Only the user with the matching userId can read or list their form fields.
+     * @allow (create): Only the user with the matching userId can create a form field.
+     * @allow (update, delete): Only the user with the matching userId can update or delete their form fields, after it exists.
+     * @deny (get, list): Any user cannot read or list other users' form fields.
+     * @deny (create): A user cannot create a form field with a userId that does not match their auth.uid.
+     * @deny (update, delete): Any user cannot update or delete other users' form fields.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Allows anyone to read the transactionCodes collection, but restricts writes.
-    * @path /transactionCodes/{transactionCodeId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /transactionCodes/{transactionCodeId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for transactionCodes.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting lookup tables.
+     * @path /lookupTables/{lookupTableId}
+     * @allow (get, list): Any user can read or list lookup tables.
+     * @allow (create): An authenticated user can create a lookup table.
+     * @allow (update, delete): Only an authenticated user can update or delete a lookup table.
+     * @deny (create): An unauthenticated user cannot create a lookup table.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a lookup table.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /lookupTables/{lookupTableId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the products collection, but restricts writes.
-    * @path /products/{productId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /products/{productId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for products.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting MIS reports.
+     * @path /misReports/{misReportId}
+     * @allow (get, list): Any user can read or list MIS reports.
+     * @allow (create): An authenticated user can create a MIS report.
+     * @allow (update, delete): Only an authenticated user can update or delete a MIS report.
+     * @deny (create): An unauthenticated user cannot create a MIS report.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a MIS report.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /misReports/{misReportId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the categories collection, but restricts writes.
-    * @path /categories/{categoryId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /categories/{categoryId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for categories.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting transaction codes.
+     * @path /transactionCodes/{transactionCodeId}
+     * @allow (get, list): Any user can read or list transaction codes.
+     * @allow (create): An authenticated user can create a transaction code.
+     * @allow (update, delete): Only an authenticated user can update or delete a transaction code.
+     * @deny (create): An unauthenticated user cannot create a transaction code.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a transaction code.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /transactionCodes/{transactionCodeId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the stocks collection, but restricts writes.
-    * @path /stocks/{stockId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /stocks/{stockId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for stocks.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting products.
+     * @path /products/{productId}
+     * @allow (get, list): Any user can read or list products.
+     * @allow (create): An authenticated user can create a product.
+     * @allow (update, delete): Only an authenticated user can update or delete a product.
+     * @deny (create): An unauthenticated user cannot create a product.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a product.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the customers collection, but restricts writes.
-    * @path /customers/{customerId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /customers/{customerId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for customers.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting categories.
+     * @path /categories/{categoryId}
+     * @allow (get, list): Any user can read or list categories.
+     * @allow (create): An authenticated user can create a category.
+     * @allow (update, delete): Only an authenticated user can update or delete a category.
+     * @deny (create): An unauthenticated user cannot create a category.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a category.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /categories/{categoryId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the orders collection, but restricts writes.
-    * @path /orders/{orderId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /orders/{orderId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for orders.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting stocks.
+     * @path /stocks/{stockId}
+     * @allow (get, list): Any user can read or list stocks.
+     * @allow (create): An authenticated user can create a stock.
+     * @allow (update, delete): Only an authenticated user can update or delete a stock.
+     * @deny (create): An unauthenticated user cannot create a stock.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a stock.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /stocks/{stockId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the orderLineItems subcollection, but restricts writes.
-    * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /orders/{orderId}/orderLineItems/{orderLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for orderLineItems.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting customers.
+     * @path /customers/{customerId}
+     * @allow (get, list): Any user can read or list customers.
+     * @allow (create): An authenticated user can create a customer.
+     * @allow (update, delete): Only an authenticated user can update or delete a customer.
+     * @deny (create): An unauthenticated user cannot create a customer.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a customer.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /customers/{customerId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the invoices collection, but restricts writes.
-    * @path /invoices/{invoiceId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /invoices/{invoiceId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for invoices.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting orders.
+     * @path /orders/{orderId}
+     * @allow (get, list): Any user can read or list orders.
+     * @allow (create): An authenticated user can create an order.
+     * @allow (update, delete): Only an authenticated user can update or delete an order.
+     * @deny (create): An unauthenticated user cannot create an order.
+     * @deny (update, delete): An unauthenticated user cannot update or delete an order.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /orders/{orderId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the returns collection, but restricts writes.
-    * @path /returns/{returnId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /returns/{returnId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for returns.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting order line items.
+     * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
+     * @allow (get, list): Any user can read or list order line items.
+     * @allow (create): An authenticated user can create an order line item.
+     * @allow (update, delete): Only an authenticated user can update or delete an order line item.
+     * @deny (create): An unauthenticated user cannot create an order line item.
+     * @deny (update, delete): An unauthenticated user cannot update or delete an order line item.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /orders/{orderId}/orderLineItems/{orderLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the returnLineItems subcollection, but restricts writes.
-    * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /returns/{returnId}/returnLineItems/{returnLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for returnLineItems.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting invoices.
+     * @path /invoices/{invoiceId}
+     * @allow (get, list): Any user can read or list invoices.
+     * @allow (create): An authenticated user can create an invoice.
+     * @allow (update, delete): Only an authenticated user can update or delete an invoice.
+     * @deny (create): An unauthenticated user cannot create an invoice.
+     * @deny (update, delete): An unauthenticated user cannot update or delete an invoice.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /invoices/{invoiceId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the suppliers collection, but restricts writes.
-    * @path /suppliers/{supplierId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /suppliers/{supplierId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for suppliers.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting returns.
+     * @path /returns/{returnId}
+     * @allow (get, list): Any user can read or list returns.
+     * @allow (create): An authenticated user can create a return.
+     * @allow (update, delete): Only an authenticated user can update or delete a return.
+     * @deny (create): An unauthenticated user cannot create a return.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a return.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /returns/{returnId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the purchaseOrders collection, but restricts writes.
-    * @path /purchaseOrders/{purchaseOrderId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /purchaseOrders/{purchaseOrderId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for purchaseOrders.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting return line items.
+     * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
+     * @allow (get, list): Any user can read or list return line items.
+     * @allow (create): An authenticated user can create a return line item.
+     * @allow (update, delete): Only an authenticated user can update or delete a return line item.
+     * @deny (create): An unauthenticated user cannot create a return line item.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a return line item.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /returns/{returnId}/returnLineItems/{returnLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the poLineItems subcollection, but restricts writes.
-    * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for poLineItems.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting suppliers.
+     * @path /suppliers/{supplierId}
+     * @allow (get, list): Any user can read or list suppliers.
+     * @allow (create): An authenticated user can create a supplier.
+     * @allow (update, delete): Only an authenticated user can update or delete a supplier.
+     * @deny (create): An unauthenticated user cannot create a supplier.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a supplier.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /suppliers/{supplierId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the goodsReceiptNotes collection, but restricts writes.
-    * @path /goodsReceiptNotes/{goodsReceiptNoteId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /goodsReceiptNotes/{goodsReceiptNoteId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for goodsReceiptNotes.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting purchase orders.
+     * @path /purchaseOrders/{purchaseOrderId}
+     * @allow (get, list): Any user can read or list purchase orders.
+     * @allow (create): An authenticated user can create a purchase order.
+     * @allow (update, delete): Only an authenticated user can update or delete a purchase order.
+     * @deny (create): An unauthenticated user cannot create a purchase order.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a purchase order.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /purchaseOrders/{purchaseOrderId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the grnLineItems subcollection, but restricts writes.
-    * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for grnLineItems.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting purchase order line items.
+     * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
+     * @allow (get, list): Any user can read or list purchase order line items.
+     * @allow (create): An authenticated user can create a purchase order line item.
+     * @allow (update, delete): Only an authenticated user can update or delete a purchase order line item.
+     * @deny (create): An unauthenticated user cannot create a purchase order line item.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a purchase order line item.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the payments collection, but restricts writes.
-    * @path /payments/{paymentId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /payments/{paymentId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for payments.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting goods receipt notes.
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}
+     * @allow (get, list): Any user can read or list goods receipt notes.
+     * @allow (create): An authenticated user can create a goods receipt note.
+     * @allow (update, delete): Only an authenticated user can update or delete a goods receipt note.
+     * @deny (create): An unauthenticated user cannot create a goods receipt note.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a goods receipt note.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the chartOfAccounts collection, but restricts writes.
-    * @path /chartOfAccounts/{chartOfAccountsId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /chartOfAccounts/{chartOfAccountsId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for chartOfAccounts.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting goods receipt note line items.
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
+     * @allow (get, list): Any user can read or list goods receipt note line items.
+     * @allow (create): An authenticated user can create a goods receipt note line item.
+     * @allow (update, delete): Only an authenticated user can update or delete a goods receipt note line item.
+     * @deny (create): An unauthenticated user cannot create a goods receipt note line item.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a goods receipt note line item.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Allows anyone to read the ledgerEntries collection, but restricts writes.
-    * @path /ledgerEntries/{ledgerEntryId}
-    * @allow (get, list): if true
-    * @deny (create, update, delete): if false
-    * @principle Public read, restricted writes.
-    */
-   match /ledgerEntries/{ledgerEntryId} {
-    allow get, list: if true;
-    allow create, update, delete: if false; // TODO: Determine appropriate write conditions for ledgerEntries.
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting payments.
+     * @path /payments/{paymentId}
+     * @allow (get, list): Any user can read or list payments.
+     * @allow (create): An authenticated user can create a payment.
+     * @allow (update, delete): Only an authenticated user can update or delete a payment.
+     * @deny (create): An unauthenticated user cannot create a payment.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a payment.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /payments/{paymentId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   /**
-    * @description Denies all access to the root collection.
-    * @path /
-    * @allow (get, list, create, update, delete): if false
-    * @principle Root level access is not allowed.
-    */
-   match /{path=**} {
-    allow get, list, create, update, delete: if false;
-   }
- 
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting chart of accounts entries.
+     * @path /chartOfAccounts/{chartOfAccountsId}
+     * @allow (get, list): Any user can read or list chart of accounts entries.
+     * @allow (create): An authenticated user can create a chart of accounts entry.
+     * @allow (update, delete): Only an authenticated user can update or delete a chart of accounts entry.
+     * @deny (create): An unauthenticated user cannot create a chart of accounts entry.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a chart of accounts entry.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /chartOfAccounts/{chartOfAccountsId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
 
-   function isSignedIn() {
-    return request.auth != null;
-   }
- 
-
-   function isOwner(userId) {
-    return isSignedIn() && request.auth.uid == userId;
-   }
- 
-
-   function isExistingOwner(userId) {
-    return isOwner(userId) && resource != null;
-   }
+    /**
+     * @description Grants public read access but requires authentication for creating, updating, and deleting ledger entries.
+     * @path /ledgerEntries/{ledgerEntryId}
+     * @allow (get, list): Any user can read or list ledger entries.
+     * @allow (create): An authenticated user can create a ledger entry.
+     * @allow (update, delete): Only an authenticated user can update or delete a ledger entry.
+     * @deny (create): An unauthenticated user cannot create a ledger entry.
+     * @deny (update, delete): An unauthenticated user cannot update or delete a ledger entry.
+     * @principle Allows public read access while restricting write access to authenticated users.
+     */
+    match /ledgerEntries/{ledgerEntryId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
   }
- }
+}
