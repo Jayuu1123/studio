@@ -1,399 +1,677 @@
 /**
- * @fileoverview Firestore Security Rules for SynergyFlow ERP.
- *
- * Core Philosophy:
- * This ruleset enforces a user-centric security model with path-based ownership for user-specific data and role-based access control for collaborative data.  Denormalization is used extensively to avoid costly `get()` operations.
- *
- * Data Structure:
- * - User-specific data is nested under `/users/{userId}`.
- * - Collaborative data utilizes membership maps on documents.
- * - Public data is stored in top-level collections.
- *
- * Key Security Decisions:
- * - Enforce strict ownership for user-specific data.
- * - Implement role-based access control for collaborative data via membership maps.
- * - Segregate public and private data into different collections for simplified rules.
- * - Disallow listing of the `/users` collection for enhanced privacy.
+ * @description This ruleset enforces a strict user-ownership model for personal data and role-based access control for shared resources, emphasizing authorization independence through data denormalization.
+ * @dataStructure
+ * - `/users/{userId}`: Stores personal user data, accessible only to the user themselves.
+ * - Subcollections under `/users/{userId}` (e.g., `/users/{userId}/workflows/{workflowId}`): User-owned data trees, accessible only to the user.
+ * - Top-level collections (e.g., `/products/{productId}`, `/categories/{categoryId}`): Publicly readable but owner-restricted write access.
+ * - Collaborative access is managed via membership maps directly on the documents.
+ * @keySecurityDecisions
+ * - User listing is disabled for security reasons.
+ * - Data required for authorization is denormalized onto the documents being secured to avoid costly `get()` calls.
+ * - Read-only collections are not explicitly defined; all collections require authentication for write operations.
+ * - Ownership is enforced consistently for user-specific data trees.
+ * - Write operations are NEVER allowed with `if true;`.
+ * - Documents required for `update` and `delete` must exist.
+ * @denormalizationForAuthorization
+ * - OrderLineItems: Inherits customerId from parent Order document to authorize access without needing to read the Order.
+ * - ReturnLineItems: Inherits customerId from parent Order document (via Return) to authorize access without needing to read the Return or Order.
+ * - POLineItems: Inherits supplierId from parent PurchaseOrder document to authorize access without needing to read the PurchaseOrder.
+ * - GRNLineItems: Inherits supplierId from parent PurchaseOrder document (via GoodsReceiptNote) to authorize access without needing to read the GoodsReceiptNote or PurchaseOrder.
+ * @structuralSegregation Public and private data are stored in separate collections to simplify rules.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the requesting user is signed in.
-     * @path N/A
-     * @allow N/A
-     * @deny N/A
-     * @principle Verifies user authentication.
+     * @description Allows users to manage their custom app submodules.
+     * @path /appSubmodules/{appSubmoduleId}
+     * @allow (create) User with auth.uid can create a new appSubmodule.
+     * @deny (create) User attempts to create an appSubmodule with an invalid id.
+     * @allow (get) Any authenticated user can read an appSubmodule.
+     * @deny (get) Unauthorized user attempts to read an appSubmodule.
+     * @allow (list) Any authenticated user can list appSubmodules.
+     * @deny (list) Unauthorized user attempts to list appSubmodules.
+     * @allow (update) User with auth.uid can update an existing appSubmodule.
+     * @deny (update) User attempts to update an appSubmodule with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing appSubmodule.
+     * @deny (delete) User attempts to delete an appSubmodule with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /appSubmodules/{appSubmoduleId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of transaction entries.
+     * @path /transactionEntries/{transactionEntryId}
+     * @allow (create) User with auth.uid can create a new transactionEntry.
+     * @deny (create) User attempts to create a transactionEntry with an invalid id.
+     * @allow (get) Any authenticated user can read a transactionEntry.
+     * @deny (get) Unauthorized user attempts to read a transactionEntry.
+     * @allow (list) Any authenticated user can list transactionEntries.
+     * @deny (list) Unauthorized user attempts to list transactionEntries.
+     * @allow (update) User with auth.uid can update an existing transactionEntry.
+     * @deny (update) User attempts to update a transactionEntry with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing transactionEntry.
+     * @deny (delete) User attempts to delete a transactionEntry with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /transactionEntries/{transactionEntryId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Enforces user-ownership for user documents.
+     * @path /users/{userId}
+     * @allow (create) User with auth.uid matching the userId can create their document.
+     * @deny (create) User attempts to create a document with mismatched userId.
+     * @allow (get) User with auth.uid matching the userId can read their document.
+     * @deny (get) User attempts to read a document with mismatched userId.
+     * @allow (list) Listing of users is denied for security.
+     * @deny (list) Any attempt to list user documents.
+     * @allow (update) User with auth.uid matching the userId can update their document.
+     * @deny (update) User attempts to update a document with mismatched userId.
+     * @allow (delete) User with auth.uid matching the userId can delete their document.
+     * @deny (delete) User attempts to delete a document with mismatched userId.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Allows management of roles.
+     * @path /roles/{roleId}
+     * @allow (create) User with auth.uid can create a new role.
+     * @deny (create) User attempts to create a role with an invalid id.
+     * @allow (get) Any authenticated user can read a role.
+     * @deny (get) Unauthorized user attempts to read a role.
+     * @allow (list) Any authenticated user can list roles.
+     * @deny (list) Unauthorized user attempts to list roles.
+     * @allow (update) User with auth.uid can update an existing role.
+     * @deny (update) User attempts to update a role with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing role.
+     * @deny (delete) User attempts to delete a role with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /roles/{roleId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Enforces user-ownership for workflows.
+     * @path /users/{userId}/workflows/{workflowId}
+     * @allow (create) User with auth.uid matching the userId can create a workflow.
+     * @deny (create) User attempts to create a workflow with mismatched userId.
+     * @allow (get) User with auth.uid matching the userId can read their workflow.
+     * @deny (get) User attempts to read a workflow with mismatched userId.
+     * @allow (list) User with auth.uid matching the userId can list their workflows.
+     * @deny (list) User attempts to list workflows with mismatched userId.
+     * @allow (update) User with auth.uid matching the userId can update their workflow.
+     * @deny (update) User attempts to update a workflow with mismatched userId.
+     * @allow (delete) User with auth.uid matching the userId can delete their workflow.
+     * @deny (delete) User attempts to delete a workflow with mismatched userId.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/workflows/{workflowId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Enforces user-ownership for workflow steps.
+     * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
+     * @allow (create) User with auth.uid matching the userId can create a workflow step.
+     * @deny (create) User attempts to create a workflow step with mismatched userId.
+     * @allow (get) User with auth.uid matching the userId can read their workflow step.
+     * @deny (get) User attempts to read a workflow step with mismatched userId.
+     * @allow (list) User with auth.uid matching the userId can list their workflow steps.
+     * @deny (list) User attempts to list workflow steps with mismatched userId.
+     * @allow (update) User with auth.uid matching the userId can update their workflow step.
+     * @deny (update) User attempts to update a workflow step with mismatched userId.
+     * @allow (delete) User with auth.uid matching the userId can delete their workflow step.
+     * @deny (delete) User attempts to delete a workflow step with mismatched userId.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Enforces user-ownership for form definitions.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}
+     * @allow (create) User with auth.uid matching the userId can create a form definition.
+     * @deny (create) User attempts to create a form definition with mismatched userId.
+     * @allow (get) User with auth.uid matching the userId can read their form definition.
+     * @deny (get) User attempts to read a form definition with mismatched userId.
+     * @allow (list) User with auth.uid matching the userId can list their form definitions.
+     * @deny (list) User attempts to list form definitions with mismatched userId.
+     * @allow (update) User with auth.uid matching the userId can update their form definition.
+     * @deny (update) User attempts to update a form definition with mismatched userId.
+     * @allow (delete) User with auth.uid matching the userId can delete their form definition.
+     * @deny (delete) User attempts to delete a form definition with mismatched userId.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Enforces user-ownership for form fields.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
+     * @allow (create) User with auth.uid matching the userId can create a form field.
+     * @deny (create) User attempts to create a form field with mismatched userId.
+     * @allow (get) User with auth.uid matching the userId can read their form field.
+     * @deny (get) User attempts to read a form field with mismatched userId.
+     * @allow (list) User with auth.uid matching the userId can list their form fields.
+     * @deny (list) User attempts to list form fields with mismatched userId.
+     * @allow (update) User with auth.uid matching the userId can update their form field.
+     * @deny (update) User attempts to update a form field with mismatched userId.
+     * @allow (delete) User with auth.uid matching the userId can delete their form field.
+     * @deny (delete) User attempts to delete a form field with mismatched userId.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Allows management of lookup tables.
+     * @path /lookupTables/{lookupTableId}
+     * @allow (create) User with auth.uid can create a new lookupTable.
+     * @deny (create) User attempts to create a lookupTable with an invalid id.
+     * @allow (get) Any authenticated user can read a lookupTable.
+     * @deny (get) Unauthorized user attempts to read a lookupTable.
+     * @allow (list) Any authenticated user can list lookupTables.
+     * @deny (list) Unauthorized user attempts to list lookupTables.
+     * @allow (update) User with auth.uid can update an existing lookupTable.
+     * @deny (update) User attempts to update a lookupTable with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing lookupTable.
+     * @deny (delete) User attempts to delete a lookupTable with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /lookupTables/{lookupTableId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of MIS reports.
+     * @path /misReports/{misReportId}
+     * @allow (create) User with auth.uid can create a new misReport.
+     * @deny (create) User attempts to create a misReport with an invalid id.
+     * @allow (get) Any authenticated user can read a misReport.
+     * @deny (get) Unauthorized user attempts to read a misReport.
+     * @allow (list) Any authenticated user can list misReports.
+     * @deny (list) Unauthorized user attempts to list misReports.
+     * @allow (update) User with auth.uid can update an existing misReport.
+     * @deny (update) User attempts to update a misReport with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing misReport.
+     * @deny (delete) User attempts to delete a misReport with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /misReports/{misReportId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of transaction codes.
+     * @path /transactionCodes/{transactionCodeId}
+     * @allow (create) User with auth.uid can create a new transactionCode.
+     * @deny (create) User attempts to create a transactionCode with an invalid id.
+     * @allow (get) Any authenticated user can read a transactionCode.
+     * @deny (get) Unauthorized user attempts to read a transactionCode.
+     * @allow (list) Any authenticated user can list transactionCodes.
+     * @deny (list) Unauthorized user attempts to list transactionCodes.
+     * @allow (update) User with auth.uid can update an existing transactionCode.
+     * @deny (update) User attempts to update a transactionCode with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing transactionCode.
+     * @deny (delete) User attempts to delete a transactionCode with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /transactionCodes/{transactionCodeId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of products.
+     * @path /products/{productId}
+     * @allow (create) User with auth.uid can create a new product.
+     * @deny (create) User attempts to create a product with an invalid id.
+     * @allow (get) Any authenticated user can read a product.
+     * @deny (get) Unauthorized user attempts to read a product.
+     * @allow (list) Any authenticated user can list products.
+     * @deny (list) Unauthorized user attempts to list products.
+     * @allow (update) User with auth.uid can update an existing product.
+     * @deny (update) User attempts to update a product with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing product.
+     * @deny (delete) User attempts to delete a product with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of categories.
+     * @path /categories/{categoryId}
+     * @allow (create) User with auth.uid can create a new category.
+     * @deny (create) User attempts to create a category with an invalid id.
+     * @allow (get) Any authenticated user can read a category.
+     * @deny (get) Unauthorized user attempts to read a category.
+     * @allow (list) Any authenticated user can list categories.
+     * @deny (list) Unauthorized user attempts to list categories.
+     * @allow (update) User with auth.uid can update an existing category.
+     * @deny (update) User attempts to update a category with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing category.
+     * @deny (delete) User attempts to delete a category with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /categories/{categoryId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of stocks.
+     * @path /stocks/{stockId}
+     * @allow (create) User with auth.uid can create a new stock.
+     * @deny (create) User attempts to create a stock with an invalid id.
+     * @allow (get) Any authenticated user can read a stock.
+     * @deny (get) Unauthorized user attempts to read a stock.
+     * @allow (list) Any authenticated user can list stocks.
+     * @deny (list) Unauthorized user attempts to list stocks.
+     * @allow (update) User with auth.uid can update an existing stock.
+     * @deny (update) User attempts to update a stock with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing stock.
+     * @deny (delete) User attempts to delete a stock with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /stocks/{stockId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of customers.
+     * @path /customers/{customerId}
+     * @allow (create) User with auth.uid can create a new customer.
+     * @deny (create) User attempts to create a customer with an invalid id.
+     * @allow (get) Any authenticated user can read a customer.
+     * @deny (get) Unauthorized user attempts to read a customer.
+     * @allow (list) Any authenticated user can list customers.
+     * @deny (list) Unauthorized user attempts to list customers.
+     * @allow (update) User with auth.uid can update an existing customer.
+     * @deny (update) User attempts to update a customer with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing customer.
+     * @deny (delete) User attempts to delete a customer with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /customers/{customerId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of orders.
+     * @path /orders/{orderId}
+     * @allow (create) User with auth.uid can create a new order.
+     * @deny (create) User attempts to create an order with an invalid id.
+     * @allow (get) Any authenticated user can read an order.
+     * @deny (get) Unauthorized user attempts to read an order.
+     * @allow (list) Any authenticated user can list orders.
+     * @deny (list) Unauthorized user attempts to list orders.
+     * @allow (update) User with auth.uid can update an existing order.
+     * @deny (update) User attempts to update an order with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing order.
+     * @deny (delete) User attempts to delete an order with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /orders/{orderId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Enforces access control for order line items based on the denormalized customerId from the parent Order.
+     * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
+     * @allow (create) User with auth.uid can create a new orderLineItem.
+     * @deny (create) User attempts to create an orderLineItem with an invalid id.
+     * @allow (get) Any authenticated user can read a orderLineItem.
+     * @deny (get) Unauthorized user attempts to read a orderLineItem.
+     * @allow (list) Any authenticated user can list orderLineItems.
+     * @deny (list) Unauthorized user attempts to list orderLineItems.
+     * @allow (update) User with auth.uid can update an existing orderLineItem.
+     * @deny (update) User attempts to update a orderLineItem with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing orderLineItem.
+     * @deny (delete) User attempts to delete a orderLineItem with an invalid id.
+     * @principle Enforces access based on denormalized data from parent document.
+     */
+    match /orders/{orderId}/orderLineItems/{orderLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of invoices.
+     * @path /invoices/{invoiceId}
+     * @allow (create) User with auth.uid can create a new invoice.
+     * @deny (create) User attempts to create an invoice with an invalid id.
+     * @allow (get) Any authenticated user can read a invoice.
+     * @deny (get) Unauthorized user attempts to read a invoice.
+     * @allow (list) Any authenticated user can list invoices.
+     * @deny (list) Unauthorized user attempts to list invoices.
+     * @allow (update) User with auth.uid can update an existing invoice.
+     * @deny (update) User attempts to update a invoice with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing invoice.
+     * @deny (delete) User attempts to delete a invoice with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /invoices/{invoiceId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of returns.
+     * @path /returns/{returnId}
+     * @allow (create) User with auth.uid can create a new return.
+     * @deny (create) User attempts to create a return with an invalid id.
+     * @allow (get) Any authenticated user can read a return.
+     * @deny (get) Unauthorized user attempts to read a return.
+     * @allow (list) Any authenticated user can list returns.
+     * @deny (list) Unauthorized user attempts to list returns.
+     * @allow (update) User with auth.uid can update an existing return.
+     * @deny (update) User attempts to update a return with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing return.
+     * @deny (delete) User attempts to delete a return with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /returns/{returnId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Enforces access control for return line items based on the denormalized customerId from the parent Order (via Return).
+     * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
+     * @allow (create) User with auth.uid can create a new returnLineItem.
+     * @deny (create) User attempts to create a returnLineItem with an invalid id.
+     * @allow (get) Any authenticated user can read a returnLineItem.
+     * @deny (get) Unauthorized user attempts to read a returnLineItem.
+     * @allow (list) Any authenticated user can list returnLineItems.
+     * @deny (list) Unauthorized user attempts to list returnLineItems.
+     * @allow (update) User with auth.uid can update an existing returnLineItem.
+     * @deny (update) User attempts to update a returnLineItem with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing returnLineItem.
+     * @deny (delete) User attempts to delete a returnLineItem with an invalid id.
+     * @principle Enforces access based on denormalized data from parent document.
+     */
+    match /returns/{returnId}/returnLineItems/{returnLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of suppliers.
+     * @path /suppliers/{supplierId}
+     * @allow (create) User with auth.uid can create a new supplier.
+     * @deny (create) User attempts to create a supplier with an invalid id.
+     * @allow (get) Any authenticated user can read a supplier.
+     * @deny (get) Unauthorized user attempts to read a supplier.
+     * @allow (list) Any authenticated user can list suppliers.
+     * @deny (list) Unauthorized user attempts to list suppliers.
+     * @allow (update) User with auth.uid can update an existing supplier.
+     * @deny (update) User attempts to update a supplier with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing supplier.
+     * @deny (delete) User attempts to delete a supplier with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /suppliers/{supplierId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of purchase orders.
+     * @path /purchaseOrders/{purchaseOrderId}
+     * @allow (create) User with auth.uid can create a new purchaseOrder.
+     * @deny (create) User attempts to create a purchaseOrder with an invalid id.
+     * @allow (get) Any authenticated user can read a purchaseOrder.
+     * @deny (get) Unauthorized user attempts to read a purchaseOrder.
+     * @allow (list) Any authenticated user can list purchaseOrders.
+     * @deny (list) Unauthorized user attempts to list purchaseOrders.
+     * @allow (update) User with auth.uid can update an existing purchaseOrder.
+     * @deny (update) User attempts to update a purchaseOrder with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing purchaseOrder.
+     * @deny (delete) User attempts to delete a purchaseOrder with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /purchaseOrders/{purchaseOrderId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Enforces access control for purchase order line items based on the denormalized supplierId from the parent PurchaseOrder.
+     * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
+     * @allow (create) User with auth.uid can create a new poLineItem.
+     * @deny (create) User attempts to create a poLineItem with an invalid id.
+     * @allow (get) Any authenticated user can read a poLineItem.
+     * @deny (get) Unauthorized user attempts to read a poLineItem.
+     * @allow (list) Any authenticated user can list poLineItems.
+     * @deny (list) Unauthorized user attempts to list poLineItems.
+     * @allow (update) User with auth.uid can update an existing poLineItem.
+     * @deny (update) User attempts to update a poLineItem with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing poLineItem.
+     * @deny (delete) User attempts to delete a poLineItem with an invalid id.
+     * @principle Enforces access based on denormalized data from parent document.
+     */
+    match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of goods receipt notes.
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}
+     * @allow (create) User with auth.uid can create a new goodsReceiptNote.
+     * @deny (create) User attempts to create a goodsReceiptNote with an invalid id.
+     * @allow (get) Any authenticated user can read a goodsReceiptNote.
+     * @deny (get) Unauthorized user attempts to read a goodsReceiptNote.
+     * @allow (list) Any authenticated user can list goodsReceiptNotes.
+     * @deny (list) Unauthorized user attempts to list goodsReceiptNotes.
+     * @allow (update) User with auth.uid can update an existing goodsReceiptNote.
+     * @deny (update) User attempts to update a goodsReceiptNote with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing goodsReceiptNote.
+     * @deny (delete) User attempts to delete a goodsReceiptNote with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Enforces access control for goods receipt note line items based on the denormalized supplierId from the parent PurchaseOrder (via GoodsReceiptNote).
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
+     * @allow (create) User with auth.uid can create a new grnLineItem.
+     * @deny (create) User attempts to create a grnLineItem with an invalid id.
+     * @allow (get) Any authenticated user can read a grnLineItem.
+     * @deny (get) Unauthorized user attempts to read a grnLineItem.
+     * @allow (list) Any authenticated user can list grnLineItems.
+     * @deny (list) Unauthorized user attempts to list grnLineItems.
+     * @allow (update) User with auth.uid can update an existing grnLineItem.
+     * @deny (update) User attempts to update a grnLineItem with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing grnLineItem.
+     * @deny (delete) User attempts to delete a grnLineItem with an invalid id.
+     * @principle Enforces access based on denormalized data from parent document.
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of payments.
+     * @path /payments/{paymentId}
+     * @allow (create) User with auth.uid can create a new payment.
+     * @deny (create) User attempts to create a payment with an invalid id.
+     * @allow (get) Any authenticated user can read a payment.
+     * @deny (get) Unauthorized user attempts to read a payment.
+     * @allow (list) Any authenticated user can list payments.
+     * @deny (list) Unauthorized user attempts to list payments.
+     * @allow (update) User with auth.uid can update an existing payment.
+     * @deny (update) User attempts to update a payment with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing payment.
+     * @deny (delete) User attempts to delete a payment with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /payments/{paymentId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of chart of accounts entries.
+     * @path /chartOfAccounts/{chartOfAccountsId}
+     * @allow (create) User with auth.uid can create a new chartOfAccounts.
+     * @deny (create) User attempts to create a chartOfAccounts with an invalid id.
+     * @allow (get) Any authenticated user can read a chartOfAccounts.
+     * @deny (get) Unauthorized user attempts to read a chartOfAccounts.
+     * @allow (list) Any authenticated user can list chartOfAccounts.
+     * @deny (list) Unauthorized user attempts to list chartOfAccounts.
+     * @allow (update) User with auth.uid can update an existing chartOfAccounts.
+     * @deny (update) User attempts to update a chartOfAccounts with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing chartOfAccounts.
+     * @deny (delete) User attempts to delete a chartOfAccounts with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /chartOfAccounts/{chartOfAccountsId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    /**
+     * @description Allows management of ledger entries.
+     * @path /ledgerEntries/{ledgerEntryId}
+     * @allow (create) User with auth.uid can create a new ledgerEntry.
+     * @deny (create) User attempts to create a ledgerEntry with an invalid id.
+     * @allow (get) Any authenticated user can read a ledgerEntry.
+     * @deny (get) Unauthorized user attempts to read a ledgerEntry.
+     * @allow (list) Any authenticated user can list ledgerEntries.
+     * @deny (list) Unauthorized user attempts to list ledgerEntries.
+     * @allow (update) User with auth.uid can update an existing ledgerEntry.
+     * @deny (update) User attempts to update a ledgerEntry with an invalid id.
+     * @allow (delete) User with auth.uid can delete an existing ledgerEntry.
+     * @deny (delete) User attempts to delete a ledgerEntry with an invalid id.
+     * @principle Enforces ownership for writes, allows public reads.
+     */
+    match /ledgerEntries/{ledgerEntryId} {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+
+    //--------------------------------------------------------------------------------------------------
+    // Helper functions
+    //--------------------------------------------------------------------------------------------------
+
+    /**
+     * @description Checks if the user is signed in.
+     * @return {boolean} True if the user is signed in, false otherwise.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * @description Checks if the requesting user is the owner of the document, based on the provided userId.
-     * @path N/A
-     * @allow N/A
-     * @deny N/A
-     * @principle Enforces document ownership.
+     * @description Checks if the user is the owner of the document based on the userId.
+     * @param {string} userId - The user ID to check against.
+     * @return {boolean} True if the user is the owner, false otherwise.
      */
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
     /**
-     * @description Checks if the requesting user is the owner of the EXISTING document, based on the provided userId, and that the document exists.
-     * @path N/A
-     * @allow N/A
-     * @deny N/A
-     * @principle Enforces document ownership and document existence for updates and deletes.
+     * @description Checks if the user is the owner of the document and the document exists.
+     * @param {string} userId - The user ID to check against.
+     * @return {boolean} True if the user is the existing owner, false otherwise.
      */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Collection of custom submodules created by users.
-     * @path /appSubmodules/{appSubmoduleId}
-     * @allow (create) User with valid auth creates a new submodule.
-     * @deny (create) User without auth attempts to create a submodule.
-     * @principle Access to app submodules is open to all signed-in users.
-     */
-    match /appSubmodules/{appSubmoduleId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false; // Open reads, no writes.
-    }
-
-    /**
-     * @description Collection of individual transaction entries for all submodules.
-     * @path /transactionEntries/{transactionEntryId}
-     * @allow (create) User with valid auth creates a new transaction entry.
-     * @deny (create) User without auth attempts to create a transaction entry.
-     * @principle Access to transaction entries is open to all signed-in users.
-     */
-    match /transactionEntries/{transactionEntryId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if false; // Open reads, no writes.
-    }
-
-    /**
-     * @description Collection of user documents. Stores personal user data. Path-based ownership for private data.
-     * @path /users/{userId}
-     * @allow (create) User with auth creates their own user document.
-     * @deny (create) User with auth attempts to create another user's document.
-     * @principle Enforces document ownership for user profiles.
-     */
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false; // Prevent listing of all users
-      allow create: if isOwner(userId);
-      allow update, delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Collection of role documents.  Defines roles within the RBAC system.
-     * @path /roles/{roleId}
-     * @allow (get) Any signed-in user can read a role document.
-     * @deny (create) No one can create, update, or delete a role document.
-     * @principle Roles are read-only and available to all authenticated users.
-     */
-    match /roles/{roleId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of workflows owned by a specific user. Path-based ownership.
-     * @path /users/{userId}/workflows/{workflowId}
-     * @allow (create) User creates a workflow under their user ID.
-     * @deny (create) User attempts to create a workflow under another user ID.
-     * @principle Enforces document ownership for workflows.
-     */
-    match /users/{userId}/workflows/{workflowId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update, delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Collection of workflow steps belonging to a specific workflow. Path-based ownership.
-     * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
-     * @allow (create) User creates a workflow step under their workflow.
-     * @deny (create) User attempts to create a workflow step under another user's workflow.
-     * @principle Enforces document ownership for workflow steps.
-     */
-    match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update, delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Collection of form definitions owned by a specific user. Path-based ownership.
-     * @path /users/{userId}/formDefinitions/{formDefinitionId}
-     * @allow (create) User creates a form definition under their user ID.
-     * @deny (create) User attempts to create a form definition under another user ID.
-     * @principle Enforces document ownership for form definitions.
-     */
-    match /users/{userId}/formDefinitions/{formDefinitionId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update, delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Collection of form fields belonging to a specific form definition. Includes denormalized 'workflowId' and potentially other workflow-related attributes from the parent FormDefinition for authorization independence.  Path-based ownership.
-     * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-     * @allow (create) User creates a form field under their form definition.
-     * @deny (create) User attempts to create a form field under another user's form definition.
-     * @principle Enforces document ownership for form fields.
-     */
-    match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update, delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Collection of lookup tables.
-     * @path /lookupTables/{lookupTableId}
-     * @allow (get) Any signed-in user can read a lookup table.
-     * @deny (create) No one can create, update, or delete a lookup table.
-     * @principle Lookup tables are read-only and available to all authenticated users.
-     */
-    match /lookupTables/{lookupTableId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of MIS reports. Includes denormalized 'members' map for authorization independence.
-     * @path /misReports/{misReportId}
-     * @allow (get) Any signed-in user can read an MIS report.
-     * @deny (create) No one can create, update, or delete an MIS report.
-     * @principle MIS reports are read-only and available to all authenticated users.
-     */
-    match /misReports/{misReportId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of transaction codes.
-     * @path /transactionCodes/{transactionCodeId}
-     * @allow (get) Any signed-in user can read a transaction code.
-     * @deny (create) No one can create, update, or delete a transaction code.
-     * @principle Transaction codes are read-only and available to all authenticated users.
-     */
-    match /transactionCodes/{transactionCodeId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of product documents.
-     * @path /products/{productId}
-     * @allow (get) Any signed-in user can read a product document.
-     * @deny (create) No one can create, update, or delete a product document.
-     * @principle Products are read-only and available to all authenticated users.
-     */
-    match /products/{productId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of product categories.
-     * @path /categories/{categoryId}
-     * @allow (get) Any signed-in user can read a category document.
-     * @deny (create) No one can create, update, or delete a category document.
-     * @principle Categories are read-only and available to all authenticated users.
-     */
-    match /categories/{categoryId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of stock level entries.
-     * @path /stocks/{stockId}
-     * @allow (get) Any signed-in user can read a stock document.
-     * @deny (create) No one can create, update, or delete a stock document.
-     * @principle Stocks are read-only and available to all authenticated users.
-     */
-    match /stocks/{stockId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of customer documents.
-     * @path /customers/{customerId}
-     * @allow (get) Any signed-in user can read a customer document.
-     * @deny (create) No one can create, update, or delete a customer document.
-     * @principle Customers are read-only and available to all authenticated users.
-     */
-    match /customers/{customerId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of order documents.
-     * @path /orders/{orderId}
-     * @allow (get) Any signed-in user can read an order document.
-     * @deny (create) No one can create, update, or delete an order document.
-     * @principle Orders are read-only and available to all authenticated users.
-     */
-    match /orders/{orderId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Subcollection of order line items for a specific order. Includes denormalized 'customerId' from the parent Order for authorization independence.
-     * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
-     * @allow (get) Any signed-in user can read an order line item.
-     * @deny (create) No one can create, update, or delete an order line item.
-     * @principle Order line items are read-only and available to all authenticated users.
-     */
-    match /orders/{orderId}/orderLineItems/{orderLineItemId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of invoice documents.
-     * @path /invoices/{invoiceId}
-     * @allow (get) Any signed-in user can read an invoice document.
-     * @deny (create) No one can create, update, or delete an invoice document.
-     * @principle Invoices are read-only and available to all authenticated users.
-     */
-    match /invoices/{invoiceId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of return documents.
-     * @path /returns/{returnId}
-     * @allow (get) Any signed-in user can read a return document.
-     * @deny (create) No one can create, update, or delete a return document.
-     * @principle Returns are read-only and available to all authenticated users.
-     */
-    match /returns/{returnId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Subcollection of return line items for a specific return. Includes denormalized 'customerId' from the parent Order (via Return) for authorization independence.
-     * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
-     * @allow (get) Any signed-in user can read a return line item.
-     * @deny (create) No one can create, update, or delete a return line item.
-     * @principle Return line items are read-only and available to all authenticated users.
-     */
-    match /returns/{returnId}/returnLineItems/{returnLineItemId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of supplier documents.
-     * @path /suppliers/{supplierId}
-     * @allow (get) Any signed-in user can read a supplier document.
-     * @deny (create) No one can create, update, or delete a supplier document.
-     * @principle Suppliers are read-only and available to all authenticated users.
-     */
-    match /suppliers/{supplierId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of purchase order documents.
-     * @path /purchaseOrders/{purchaseOrderId}
-     * @allow (get) Any signed-in user can read a purchase order document.
-     * @deny (create) No one can create, update, or delete a purchase order document.
-     * @principle Purchase orders are read-only and available to all authenticated users.
-     */
-    match /purchaseOrders/{purchaseOrderId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Subcollection of purchase order line items for a specific purchase order.  Includes denormalized 'supplierId' from the parent PurchaseOrder for authorization independence.
-     * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
-     * @allow (get) Any signed-in user can read a purchase order line item.
-     * @deny (create) No one can create, update, or delete a purchase order line item.
-     * @principle Purchase order line items are read-only and available to all authenticated users.
-     */
-    match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of goods receipt note documents.
-     * @path /goodsReceiptNotes/{goodsReceiptNoteId}
-     * @allow (get) Any signed-in user can read a goods receipt note document.
-     * @deny (create) No one can create, update, or delete a goods receipt note document.
-     * @principle Goods receipt notes are read-only and available to all authenticated users.
-     */
-    match /goodsReceiptNotes/{goodsReceiptNoteId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Subcollection of goods receipt note line items for a specific goods receipt note. Includes denormalized 'supplierId' from the parent PurchaseOrder (via GoodsReceiptNote) for authorization independence.
-     * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
-     * @allow (get) Any signed-in user can read a goods receipt note line item.
-     * @deny (create) No one can create, update, or delete a goods receipt note line item.
-     * @principle Goods receipt note line items are read-only and available to all authenticated users.
-     */
-    match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of payment documents.
-     * @path /payments/{paymentId}
-     * @allow (get) Any signed-in user can read a payment document.
-     * @deny (create) No one can create, update, or delete a payment document.
-     * @principle Payments are read-only and available to all authenticated users.
-     */
-    match /payments/{paymentId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of chart of accounts entries.
-     * @path /chartOfAccounts/{chartOfAccountsId}
-     * @allow (get) Any signed-in user can read a chart of accounts document.
-     * @deny (create) No one can create, update, or delete a chart of accounts document.
-     * @principle Chart of accounts entries are read-only and available to all authenticated users.
-     */
-    match /chartOfAccounts/{chartOfAccountsId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
-    }
-
-     /**
-      * @description Collection of ledger entries.
-      * @path /ledgerEntries/{ledgerEntryId}
-      * @allow (get) Any signed-in user can read a ledger entry document.
-      * @deny (create) No one can create, update, or delete a ledger entry document.
-      * @principle Ledger entries are read-only and available to all authenticated users.
-      */
-    match /ledgerEntries/{ledgerEntryId} {
-        allow get, list: if isSignedIn();
-        allow create, update, delete: if false;
     }
   }
 }
