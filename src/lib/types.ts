@@ -32,3 +32,10 @@ export type RequisitionEntry = {
     department: string;
     productionItem: string;
 }
+
+export type AppSubmodule = {
+  id?: string;
+  name: string;
+  mainModule: string;
+  createdAt: any;
+}

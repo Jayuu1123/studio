@@ -1,3 +1,4 @@
+'use client';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,14 +7,75 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useState } from "react";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { collection, serverTimestamp } from "firebase/firestore";
+import type { AppSubmodule } from "@/lib/types";
+import { useToast } from "@/hooks/use-toast";
 
-const submodules = [
-    { name: 'Production Order', mainModule: 'Transactions' },
-    { name: 'Purchase Order', mainModule: 'Purchase' },
-    { name: 'Customer', mainModule: 'Sales' },
-];
 
 export default function FormSettingPage() {
+    const [mainModule, setMainModule] = useState('');
+    const [submoduleName, setSubmoduleName] = useState('');
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const submodulesQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return collection(firestore, 'appSubmodules');
+    }, [firestore]);
+
+    const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
+
+    const handleCreateSubmodule = () => {
+        if (!mainModule || !submoduleName) {
+            toast({
+                variant: 'destructive',
+                title: "Missing Information",
+                description: "Please select a main module and provide a submodule name.",
+            });
+            return;
+        }
+
+        if (!firestore) {
+             toast({
+                variant: 'destructive',
+                title: "Database Error",
+                description: "Firestore is not available. Please try again later.",
+            });
+            return;
+        }
+
+        const newSubmodule: Omit<AppSubmodule, 'id'> = {
+            name: submoduleName,
+            mainModule: mainModule,
+            createdAt: serverTimestamp(),
+        };
+
+        const submodulesCollection = collection(firestore, 'appSubmodules');
+        addDocumentNonBlocking(submodulesCollection, newSubmodule);
+
+        toast({
+            title: "Submodule Created",
+            description: `'${submoduleName}' has been added to the '${mainModule}' module.`,
+        });
+
+        // Reset form
+        setMainModule('');
+        setSubmoduleName('');
+    };
+    
+    const handleDeleteSubmodule = (id: string) => {
+        if(!firestore) return;
+        const docRef = doc(firestore, 'appSubmodules', id);
+        deleteDocumentNonBlocking(docRef);
+        toast({
+            title: "Submodule Deleted",
+            description: "The submodule has been successfully deleted.",
+        });
+    }
+
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Form Setting</h1>
@@ -31,25 +93,32 @@ export default function FormSettingPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="main-module">Main Module</Label>
-              <Select>
+              <Select onValueChange={setMainModule} value={mainModule}>
                 <SelectTrigger id="main-module">
                   <SelectValue placeholder="Select a main module" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="transactions">Transactions</SelectItem>
-                  <SelectItem value="sales">Sales</SelectItem>
-                  <SelectItem value="inventory">Inventory</SelectItem>
-                  <SelectItem value="purchase">Purchase</SelectItem>
+                  <SelectItem value="Transactions">Transactions</SelectItem>
+                  <SelectItem value="Sales">Sales</SelectItem>
+                  <SelectItem value="Inventory">Inventory</SelectItem>
+                  <SelectItem value="Purchase">Purchase</SelectItem>
+                  <SelectItem value="CRM">CRM</SelectItem>
+                  <SelectItem value="Reports">Reports</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="submodule-name">Submodule Name</Label>
-              <Input id="submodule-name" placeholder="e.g., 'Invoices'" />
+              <Input 
+                id="submodule-name" 
+                placeholder="e.g., 'Invoices'"
+                value={submoduleName}
+                onChange={(e) => setSubmoduleName(e.target.value)}
+              />
             </div>
           </CardContent>
           <CardFooter>
-            <Button>Create Submodule</Button>
+            <Button onClick={handleCreateSubmodule}>Create Submodule</Button>
           </CardFooter>
         </Card>
 
@@ -69,8 +138,13 @@ export default function FormSettingPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {submodules.map((sub) => (
-                  <TableRow key={sub.name}>
+                {isLoading && (
+                    <TableRow>
+                        <TableCell colSpan={3} className="text-center">Loading submodules...</TableCell>
+                    </TableRow>
+                )}
+                {submodules && submodules.map((sub) => (
+                  <TableRow key={sub.id}>
                     <TableCell className="font-medium">{sub.name}</TableCell>
                     <TableCell>{sub.mainModule}</TableCell>
                     <TableCell>
@@ -84,12 +158,17 @@ export default function FormSettingPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem>Edit</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-500">Delete</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => sub.id && handleDeleteSubmodule(sub.id)} className="text-red-500">Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
+                {!isLoading && (!submodules || submodules.length === 0) && (
+                     <TableRow>
+                        <TableCell colSpan={3} className="text-center">No submodules found.</TableCell>
+                    </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -108,7 +187,7 @@ export default function FormSettingPage() {
                 <SelectValue placeholder="Select a submodule" />
               </SelectTrigger>
               <SelectContent>
-                {submodules.map(sub => <SelectItem key={sub.name} value={sub.name.toLowerCase().replace(' ', '-')}>{sub.name}</SelectItem>)}
+                {submodules && submodules.map(sub => <SelectItem key={sub.id} value={sub.id as string}>{sub.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </CardContent>
@@ -131,7 +210,7 @@ export default function FormSettingPage() {
                     <SelectValue placeholder="Select a submodule" />
                   </SelectTrigger>
                   <SelectContent>
-                     {submodules.map(sub => <SelectItem key={sub.name} value={sub.name.toLowerCase().replace(' ', '-')}>{sub.name}</SelectItem>)}
+                     {submodules && submodules.map(sub => <SelectItem key={sub.id} value={sub.id as string}>{sub.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
             </div>

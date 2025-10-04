@@ -1,5 +1,35 @@
 {
   "entities": {
+    "AppSubmodule": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AppSubmodule",
+      "type": "object",
+      "description": "Defines a custom submodule created by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the submodule."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the submodule."
+        },
+        "mainModule": {
+          "type": "string",
+          "description": "The main module this submodule belongs to (e.g., Transactions, Sales)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the submodule was created."
+        }
+      },
+      "required": [
+        "name",
+        "mainModule",
+        "createdAt"
+      ]
+    },
     "FormDefinition": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "FormDefinition",
@@ -916,6 +946,22 @@
   },
   "firestore": {
     "structure": [
+      {
+        "path": "/appSubmodules/{appSubmoduleId}",
+        "definition": {
+          "entityName": "AppSubmodule",
+          "schema": {
+            "$ref": "#/backend/entities/AppSubmodule"
+          },
+          "description": "Collection of custom submodules created by users.",
+          "params": [
+            {
+              "name": "appSubmoduleId",
+              "description": "The unique identifier for the app submodule."
+            }
+          ]
+        }
+      },
       {
         "path": "/users/{userId}",
         "definition": {
