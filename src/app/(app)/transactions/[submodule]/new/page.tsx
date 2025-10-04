@@ -1,3 +1,4 @@
+'use client';
 import Link from 'next/link';
 import {
   ChevronLeft,
@@ -36,6 +37,13 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { unslugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
+import { useFirestore } from '@/firebase';
+import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { collection, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
+import type { TransactionEntry } from '@/lib/types';
+
 
 export default function NewTransactionEntryPage({
   params,
@@ -43,6 +51,38 @@ export default function NewTransactionEntryPage({
   params: { submodule: string };
 }) {
   const submoduleName = unslugify(params.submodule);
+  const firestore = useFirestore();
+  const { toast } = useToast();
+  const router = useRouter();
+
+
+  const handleSaveEntry = () => {
+    if (!firestore) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to the database.' });
+      return;
+    }
+
+    const newEntry: Omit<TransactionEntry, 'id'> = {
+        submodule: submoduleName,
+        status: 'P',
+        user: 'Current User', // Placeholder
+        docNo: `DOC-${Date.now()}`, // Placeholder
+        category: 'Requisition', // Placeholder
+        date: serverTimestamp(),
+        department: 'Store', // Placeholder
+        productionItem: 'N/A' // Placeholder
+    };
+
+    const entriesCollection = collection(firestore, 'transactionEntries');
+    addDocumentNonBlocking(entriesCollection, newEntry);
+    
+    toast({
+        title: 'Entry Saved',
+        description: `New entry for ${submoduleName} has been saved.`,
+    });
+
+    router.push(`/transactions/${params.submodule}`);
+  };
 
   return (
     <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
@@ -70,7 +110,7 @@ export default function NewTransactionEntryPage({
             <Upload className="h-4 w-4 mr-2" />
             Export
           </Button>
-          <Button>Save Entry</Button>
+          <Button onClick={handleSaveEntry}>Save Entry</Button>
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
@@ -226,7 +266,7 @@ export default function NewTransactionEntryPage({
         <Button variant="outline" size="sm">
           Discard
         </Button>
-        <Button size="sm">Save Entry</Button>
+        <Button size="sm" onClick={handleSaveEntry}>Save Entry</Button>
       </div>
     </div>
   );

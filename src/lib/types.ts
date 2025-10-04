@@ -33,6 +33,18 @@ export type RequisitionEntry = {
     productionItem: string;
 }
 
+export type TransactionEntry = {
+  id?: string;
+  submodule: string;
+  status: 'A' | 'D' | 'L' | 'P'; // Approved, Denied, Locked, Pending
+  user: string;
+  docNo: string;
+  category: string;
+  date: any;
+  department: string;
+  productionItem: string;
+}
+
 export type AppSubmodule = {
   id?: string;
   name: string;

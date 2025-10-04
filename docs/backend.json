@@ -30,6 +30,59 @@
         "createdAt"
       ]
     },
+    "TransactionEntry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TransactionEntry",
+      "type": "object",
+      "description": "Represents a single entry within a transaction submodule.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the transaction entry."
+        },
+        "submodule": {
+          "type": "string",
+          "description": "The name of the submodule this entry belongs to."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["A", "D", "L", "P"],
+          "description": "The status of the entry (Approved, Denied, Locked, Pending)."
+        },
+        "user": {
+          "type": "string",
+          "description": "The user who created or last modified the entry."
+        },
+        "docNo": {
+          "type": "string",
+          "description": "The document number for this entry."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the transaction."
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date of the document or transaction."
+        },
+        "department": {
+          "type": "string",
+          "description": "The department associated with this entry."
+        },
+        "productionItem": {
+          "type": "string",
+          "description": "The production item related to this entry."
+        }
+      },
+      "required": [
+        "submodule",
+        "status",
+        "user",
+        "docNo",
+        "date"
+      ]
+    },
     "FormDefinition": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "FormDefinition",
@@ -958,6 +1011,22 @@
             {
               "name": "appSubmoduleId",
               "description": "The unique identifier for the app submodule."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/transactionEntries/{transactionEntryId}",
+        "definition": {
+          "entityName": "TransactionEntry",
+          "schema": {
+            "$ref": "#/backend/entities/TransactionEntry"
+          },
+          "description": "Collection of individual transaction entries for all submodules.",
+          "params": [
+            {
+              "name": "transactionEntryId",
+              "description": "The unique identifier for the transaction entry."
             }
           ]
         }

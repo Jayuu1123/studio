@@ -1,3 +1,4 @@
+'use client';
 import React from 'react';
 import {
   MoreHorizontal,
@@ -33,11 +34,11 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { unslugify } from '@/lib/utils';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import type { RequisitionEntry } from '@/lib/types';
-import { requisitionEntries } from '@/lib/data';
+import type { TransactionEntry } from '@/lib/types';
 import Link from 'next/link';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
 
 const statusConfig: {
   [key: string]: {
@@ -59,6 +60,14 @@ export default function TransactionSubmodulePage({
   params: { submodule: string };
 }) {
   const submoduleName = unslugify(params.submodule);
+  const firestore = useFirestore();
+
+  const entriesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'transactionEntries'), where('submodule', '==', submoduleName));
+  }, [firestore, submoduleName]);
+
+  const { data: transactionEntries, isLoading } = useCollection<TransactionEntry>(entriesQuery);
 
   return (
     <div className="flex flex-col gap-4">
@@ -118,7 +127,12 @@ export default function TransactionSubmodulePage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {requisitionEntries.map((entry) => (
+              {isLoading && (
+                  <TableRow>
+                      <TableCell colSpan={8} className="text-center">Loading entries...</TableCell>
+                  </TableRow>
+              )}
+              {!isLoading && transactionEntries?.map((entry) => (
                 <TableRow key={entry.docNo}>
                   <TableCell>
                     <div className='flex justify-center'>
@@ -138,13 +152,13 @@ export default function TransactionSubmodulePage({
                   </TableCell>
                   <TableCell>
                       <div className="font-medium">{entry.user}</div>
-                      <div className="text-xs text-muted-foreground">{new Date(entry.date).toLocaleDateString()}</div>
+                      <div className="text-xs text-muted-foreground">{entry.date?.toDate().toLocaleDateString()}</div>
                   </TableCell>
                   <TableCell className="font-medium text-primary hover:underline cursor-pointer">
                     {entry.docNo}
                   </TableCell>
                   <TableCell>{entry.category}</TableCell>
-                  <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
+                  <TableCell>{entry.date?.toDate().toLocaleDateString()}</TableCell>
                   <TableCell>{entry.department}</TableCell>
                   <TableCell>{entry.productionItem}</TableCell>
                   <TableCell>
@@ -171,6 +185,11 @@ export default function TransactionSubmodulePage({
                   </TableCell>
                 </TableRow>
               ))}
+               {!isLoading && (!transactionEntries || transactionEntries.length === 0) && (
+                     <TableRow>
+                        <TableCell colSpan={8} className="text-center">No entries found for {submoduleName}.</TableCell>
+                    </TableRow>
+                )}
             </TableBody>
           </Table>
         </CardContent>

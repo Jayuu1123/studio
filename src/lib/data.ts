@@ -1,4 +1,4 @@
-import type { Customer, Product, Sale, RequisitionEntry } from '@/lib/types';
+import type { Customer, Product, Sale, RequisitionEntry, TransactionEntry } from '@/lib/types';
 
 export const recentSales: Sale[] = [
   {
@@ -108,59 +108,6 @@ export const products: Product[] = [
   },
 ];
 
-export const requisitionEntries: RequisitionEntry[] = [
-    {
-      status: 'L',
-      user: 'Raj Kumar',
-      docNo: 'TIC/25-26/730',
-      category: 'Requisition',
-      date: new Date('2025-10-03'),
-      department: 'Paint',
-      productionItem: 'N/A',
-    },
-    {
-      status: 'A',
-      user: 'Babba Asghar Ali',
-      docNo: 'TIC/25-26/728',
-      category: 'Requisition',
-      date: new Date('2025-10-03'),
-      department: 'Store',
-      productionItem: 'SA-9 - independent Brake Valve(Complete)',
-    },
-    {
-      status: 'D',
-      user: 'Raj Kumar',
-      docNo: 'TIC/25-26/727',
-      category: 'Requisition',
-      date: new Date('2025-10-03'),
-      department: 'Mechanical',
-      productionItem: 'FIBA INDICATOR',
-    },
-    {
-      status: 'A',
-      user: 'Babba Asghar Ali',
-      docNo: 'TIC/25-26/726',
-      category: 'Requisition',
-      date: new Date('2025-10-03'),
-      department: 'Store',
-      productionItem: 'C2W Relay with Overcharge Features',
-    },
-     {
-      status: 'A',
-      user: 'Babba Asghar Ali',
-      docNo: 'TIC/25-26/725',
-      category: 'Requisition',
-      date: new Date('2025-09-27'),
-      department: 'Valve',
-      productionItem: 'SA-9 - independent Brake Valve(Complete)',
-    },
-     {
-      status: 'A',
-      user: 'Rehan Pervez Gorey',
-      docNo: 'TIC/25-26/724',
-      category: 'Requisition',
-      date: new Date('2025-09-27'),
-      department: 'Valve',
-      productionItem: 'SA-9 - independent Brake Valve(Complete)',
-    },
-];
+// This is now empty, as we'll be fetching data from Firestore.
+export const requisitionEntries: RequisitionEntry[] = [];
+export const transactionEntries: TransactionEntry[] = [];

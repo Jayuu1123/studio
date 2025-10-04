@@ -1,412 +1,456 @@
 /**
-  * @description This ruleset enforces a strict user-ownership model for user-specific data and employs denormalization to avoid costly `get()` calls.
-  * All write operations are protected by authorization checks to prevent unauthorized data modification.
-  *
-  * @dataStructure
-  * - User-specific data is nested under `/users/{userId}`.
-  * - Collaborative data is secured using membership maps within the documents themselves.
-  * - Top-level collections are generally readable by all but require ownership validation for write operations.
-  *
-  * @keySecurityDecisions
-  * - User listing is generally disallowed to prevent information disclosure.
-  * - Read-only collections (if any) are explicitly marked and allowed for public read access.
-  * - Default security posture for ambiguous relationships is strict owner-only access.
-  *
-  * @denormalizationForAuthorization
-  * - Authorization data (e.g., user IDs, roles) is copied directly onto documents to avoid `get()` calls in security rules.
-  * - Subcollections inherit authorization context from their parent documents by denormalizing relevant fields.
-  *
-  * @structuralSegregation
-  * - Private and public data are stored in separate collections to simplify security rules and improve performance.
-  */
- 
-
- rules_version = '2';
- service cloud.firestore {
+ * @fileoverview Firestore Security Rules for SynergyFlow ERP.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a hybrid security model combining path-based ownership with role-based access control.
+ * User-specific data is secured under the `/users/{userId}` path, while shared resources leverage membership maps
+ * directly on the documents.
+ *
+ * Data Structure:
+ * - User-specific data is nested under `/users/{userId}` (e.g., workflows, form definitions).
+ * - Top-level collections (e.g., `appSubmodules`, `roles`, `lookupTables`, etc.) are generally publicly readable but have restricted write access.
+ * - Subcollections often contain denormalized authorization data from parent documents.
+ *
+ * Key Security Decisions:
+ * - Listing of user documents (`/users`) is disallowed.
+ * - Data validation is limited to authorization-critical fields only.
+ * - Extensive denormalization is used to avoid costly `get()` calls within rules.
+ * - Owner-only writes are enforced by ensuring the `request.auth.uid` matches the specified owner ID.
+ *
+ * Denormalization for Authorization:
+ * - OrderLineItem: Contains a denormalized `customerId` from the parent `Order` document.
+ * - ReturnLineItem: Contains a denormalized `customerId` from the parent `Order` document (via Return).
+ * - POLineItem: Contains a denormalized `supplierId` from the parent `PurchaseOrder` document.
+ * - GRNLineItem: Contains a denormalized `supplierId` from the parent `PurchaseOrder` document (via GoodsReceiptNote).
+ */
+rules_version = '2';
+service cloud.firestore {
   match /databases/{database}/documents {
- 
 
-   function isSignedIn() {
-    return request.auth != null;
-   }
- 
+    /**
+     * @description Protects access to custom application submodules.
+     * @path /appSubmodules/{appSubmoduleId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /appSubmodules/{appSubmoduleId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   function isOwner(userId) {
-    return isSignedIn() && request.auth.uid == userId;
-   }
- 
+    /**
+     * @description Enforces strict user-ownership for user documents.
+     * @path /users/{userId}
+     * @allow get: if isOwner(userId);
+     * @allow list: if false;
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership for all operations within a user's data tree.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   function isExistingOwner(userId) {
-    return isOwner(userId) && resource != null;
-   }
- 
+    /**
+     * @description Protects access to role documents.
+     * @path /roles/{roleId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /roles/{roleId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read custom submodules, but only authenticated users can create, update, or delete them.
-    * @path /appSubmodules/{appSubmoduleId}
-    * @allow (get, list)
-    * @allow (create) if request.auth != null
-    * @deny (create) if request.auth == null
-    * @deny (update, delete)
-    * @principle Allows public read access but restricts write access to authenticated users.
-    */
-   match /appSubmodules/{appSubmoduleId} {
-    allow get, list: if true;
-    allow create: if isSignedIn();
-    allow update, delete: if false;
-   }
- 
+    /**
+     * @description Enforces strict user-ownership for workflows.
+     * @path /users/{userId}/workflows/{workflowId}
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership for all operations within a user's data tree.
+     */
+    match /users/{userId}/workflows/{workflowId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Enforces strict ownership for user documents. Only the authenticated user can read, create, update, or delete their own document.
-    * @path /users/{userId}
-    * @allow (get, create, update, delete) if request.auth.uid == userId
-    * @deny (list)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId} {
-    allow get: if isOwner(userId);
-    allow list: if false;
-    allow create: if isOwner(userId);
-    allow update: if isExistingOwner(userId);
-    allow delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Enforces strict user-ownership for workflow steps.
+     * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership for all operations within a user's data tree.
+     */
+    match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Allows anyone to read roles, but restricts creation, updating, and deletion.
-    * @path /roles/{roleId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to roles to prevent unauthorized modification.
-    */
-   match /roles/{roleId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Enforces strict user-ownership for form definitions.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership for all operations within a user's data tree.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Enforces strict ownership for workflows within a user's document. Only the authenticated user can read, create, update, or delete their own workflows.
-    * @path /users/{userId}/workflows/{workflowId}
-    * @allow (get, create, update, delete) if request.auth.uid == userId
-    * @deny (list)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/workflows/{workflowId} {
-    allow get: if isOwner(userId);
-    allow list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update: if isExistingOwner(userId);
-    allow delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Enforces strict user-ownership for form fields.
+     * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership for all operations within a user's data tree.
+     */
+    match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
 
-   /**
-    * @description Enforces strict ownership for workflow steps within a user's workflow. Only the authenticated user can read, create, update, or delete their own workflow steps.
-    * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
-    * @allow (get, create, update, delete) if request.auth.uid == userId
-    * @deny (list)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
-    allow get: if isOwner(userId);
-    allow list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update: if isExistingOwner(userId);
-    allow delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Protects access to lookup tables.
+     * @path /lookupTables/{lookupTableId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /lookupTables/{lookupTableId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Enforces strict ownership for form definitions within a user's document. Only the authenticated user can read, create, update, or delete their own form definitions.
-    * @path /users/{userId}/formDefinitions/{formDefinitionId}
-    * @allow (get, create, update, delete) if request.auth.uid == userId
-    * @deny (list)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/formDefinitions/{formDefinitionId} {
-    allow get: if isOwner(userId);
-    allow list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update: if isExistingOwner(userId);
-    allow delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Protects access to MIS reports.
+     * @path /misReports/{misReportId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /misReports/{misReportId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Enforces strict ownership for form fields within a user's form definition. Only the authenticated user can read, create, update, or delete their own form fields.
-    * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-    * @allow (get, create, update, delete) if request.auth.uid == userId
-    * @deny (list)
-    * @principle Enforces document ownership for all operations.
-    */
-   match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
-    allow get: if isOwner(userId);
-    allow list: if isOwner(userId);
-    allow create: if isOwner(userId);
-    allow update: if isExistingOwner(userId);
-    allow delete: if isExistingOwner(userId);
-   }
- 
+    /**
+     * @description Protects access to transaction codes.
+     * @path /transactionCodes/{transactionCodeId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /transactionCodes/{transactionCodeId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read lookup tables, but restricts creation, updating, and deletion.
-    * @path /lookupTables/{lookupTableId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to lookup tables to prevent unauthorized modification.
-    */
-   match /lookupTables/{lookupTableId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to product documents.
+     * @path /products/{productId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read MIS reports, but restricts creation, updating, and deletion.
-    * @path /misReports/{misReportId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to MIS reports to prevent unauthorized modification.
-    */
-   match /misReports/{misReportId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to product categories.
+     * @path /categories/{categoryId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /categories/{categoryId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read transaction codes, but restricts creation, updating, and deletion.
-    * @path /transactionCodes/{transactionCodeId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to transaction codes to prevent unauthorized modification.
-    */
-   match /transactionCodes/{transactionCodeId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to stock level entries.
+     * @path /stocks/{stockId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /stocks/{stockId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read products, but restricts creation, updating, and deletion.
-    * @path /products/{productId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to products to prevent unauthorized modification.
-    */
-   match /products/{productId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to customer documents.
+     * @path /customers/{customerId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /customers/{customerId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read categories, but restricts creation, updating, and deletion.
-    * @path /categories/{categoryId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to categories to prevent unauthorized modification.
-    */
-   match /categories/{categoryId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to order documents.
+     * @path /orders/{orderId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /orders/{orderId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read stock levels, but restricts creation, updating, and deletion.
-    * @path /stocks/{stockId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to stock levels to prevent unauthorized modification.
-    */
-   match /stocks/{stockId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to order line items, based on customerId denormalized from the parent Order.
+     * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /orders/{orderId}/orderLineItems/{orderLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read customers, but restricts creation, updating, and deletion.
-    * @path /customers/{customerId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to customers to prevent unauthorized modification.
-    */
-   match /customers/{customerId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to invoice documents.
+     * @path /invoices/{invoiceId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /invoices/{invoiceId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read orders, but restricts creation, updating, and deletion.
-    * @path /orders/{orderId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to orders to prevent unauthorized modification.
-    */
-   match /orders/{orderId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to return documents.
+     * @path /returns/{returnId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /returns/{returnId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read order line items, but restricts creation, updating, and deletion.
-    * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to order line items to prevent unauthorized modification.
-    */
-   match /orders/{orderId}/orderLineItems/{orderLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to return line items, based on customerId denormalized from the parent Order (via Return).
+     * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /returns/{returnId}/returnLineItems/{returnLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read invoices, but restricts creation, updating, and deletion.
-    * @path /invoices/{invoiceId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to invoices to prevent unauthorized modification.
-    */
-   match /invoices/{invoiceId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to supplier documents.
+     * @path /suppliers/{supplierId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /suppliers/{supplierId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read returns, but restricts creation, updating, and deletion.
-    * @path /returns/{returnId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to returns to prevent unauthorized modification.
-    */
-   match /returns/{returnId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to purchase order documents.
+     * @path /purchaseOrders/{purchaseOrderId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /purchaseOrders/{purchaseOrderId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read return line items, but restricts creation, updating, and deletion.
-    * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to return line items to prevent unauthorized modification.
-    */
-   match /returns/{returnId}/returnLineItems/{returnLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to purchase order line items, based on supplierId denormalized from the parent PurchaseOrder.
+     * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read suppliers, but restricts creation, updating, and deletion.
-    * @path /suppliers/{supplierId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to suppliers to prevent unauthorized modification.
-    */
-   match /suppliers/{supplierId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to goods receipt note documents.
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read purchase orders, but restricts creation, updating, and deletion.
-    * @path /purchaseOrders/{purchaseOrderId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to purchase orders to prevent unauthorized modification.
-    */
-   match /purchaseOrders/{purchaseOrderId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to goods receipt note line items, based on supplierId denormalized from the parent PurchaseOrder (via GoodsReceiptNote).
+     * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read purchase order line items, but restricts creation, updating, and deletion.
-    * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to purchase order line items to prevent unauthorized modification.
-    */
-   match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to payment documents.
+     * @path /payments/{paymentId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /payments/{paymentId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read goods receipt notes, but restricts creation, updating, and deletion.
-    * @path /goodsReceiptNotes/{goodsReceiptNoteId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to goods receipt notes to prevent unauthorized modification.
-    */
-   match /goodsReceiptNotes/{goodsReceiptNoteId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to chart of accounts entries.
+     * @path /chartOfAccounts/{chartOfAccountsId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /chartOfAccounts/{chartOfAccountsId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read goods receipt note line items, but restricts creation, updating, and deletion.
-    * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to goods receipt note line items to prevent unauthorized modification.
-    */
-   match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Protects access to ledger entries.
+     * @path /ledgerEntries/{ledgerEntryId}
+     * @allow get, list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public Read with Owner-Only Writes (but missing ownership field).
+     */
+    match /ledgerEntries/{ledgerEntryId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
 
-   /**
-    * @description Allows anyone to read payments, but restricts creation, updating, and deletion.
-    * @path /payments/{paymentId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to payments to prevent unauthorized modification.
-    */
-   match /payments/{paymentId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    // ---- Helper functions ----
 
-   /**
-    * @description Allows anyone to read chart of accounts entries, but restricts creation, updating, and deletion.
-    * @path /chartOfAccounts/{chartOfAccountsId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to chart of accounts entries to prevent unauthorized modification.
-    */
-   match /chartOfAccounts/{chartOfAccountsId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
- 
+    /**
+     * @description Checks if the current user is signed in.
+     * @return {boolean} True if the user is signed in, false otherwise.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-   /**
-    * @description Allows anyone to read ledger entries, but restricts creation, updating, and deletion.
-    * @path /ledgerEntries/{ledgerEntryId}
-    * @allow (get, list)
-    * @deny (create, update, delete)
-    * @principle Restricts write access to ledger entries to prevent unauthorized modification.
-    */
-   match /ledgerEntries/{ledgerEntryId} {
-    allow get, list: if true;
-    allow create, update, delete: if false;
-   }
+    /**
+     * @description Checks if the current user is the owner of the document.
+     * @param {string} userId The user ID to check against.
+     * @return {boolean} True if the user is the owner, false otherwise.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+     /**
+      * @description Checks if the current user is the owner of the document and the document exists.
+      * @param {string} userId The user ID to check against.
+      * @return {boolean} True if the user is the existing owner, false otherwise.
+      */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
   }
- }
+}
