@@ -318,8 +318,7 @@ export default function NewTransactionEntryPage({
                     <p className="text-sm font-medium text-muted-foreground">{formData.docNo || 'TIC/25-26/XXX'}</p>
                 </div>
                 <div className="grid gap-3">
-                    <Label htmlFor="status">Status</Label>
-                    <Select value={formData.status} onValueChange={(v) => handleInputChange('status', v)} disabled={!editId}>
+                    <Label htmlFor="status">Status</Label>                    <Select value={formData.status} onValueChange={(v) => handleInputChange('status', v)} disabled={!editId}>
                         <SelectTrigger id="status" aria-label="Select status">
                         <SelectValue placeholder="Select status" />
                         </SelectTrigger>
