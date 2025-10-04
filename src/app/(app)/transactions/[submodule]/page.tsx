@@ -55,11 +55,11 @@ const statusConfig: {
 
 
 export default function TransactionSubmodulePage({
-  params: { submodule },
+  params,
 }: {
   params: { submodule: string };
 }) {
-  const submoduleName = unslugify(submodule);
+  const submoduleName = unslugify(params.submodule);
   const firestore = useFirestore();
 
   const entriesQuery = useMemoFirebase(() => {
@@ -92,7 +92,7 @@ export default function TransactionSubmodulePage({
                 </DropdownMenuContent>
             </DropdownMenu>
             <Button asChild>
-              <Link href={`/transactions/${submodule}/new`}>
+              <Link href={`/transactions/${params.submodule}/new`}>
                 <PlusCircle className="h-4 w-4 mr-2" />Add New
               </Link>
             </Button>
