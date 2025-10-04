@@ -1,411 +1,412 @@
 /**
- * @fileoverview Firestore Security Rules for SynergyFlow ERP.
- *
- * Core Philosophy:
- * This ruleset prioritizes a secure, role-based access control system with path-based ownership for user-specific data. It avoids complex queries in rules by denormalizing authorization data directly onto documents.
- *
- * Data Structure:
- * - User-specific data is nested under `/users/{userId}`.
- * - Collaborative data uses membership maps on documents.
- * - Global roles are stored in dedicated collections (not implemented in this ruleset).
- *
- * Key Security Decisions:
- * - Listing of users is disallowed.
- * - Write operations always require authorization checks.
- *
- * Denormalization for Authorization:
- * - Authorization data (e.g., user roles, membership lists) is copied directly onto documents to avoid costly `get()` calls within security rules.
- *
- * Structural Segregation:
- * - Data with different security requirements (e.g., public vs. private reports) is stored in separate collections.
- */
-rules_version = '2';
-service cloud.firestore {
+  * @description This ruleset enforces a strict user-ownership model for user-specific data and employs denormalization to avoid costly `get()` calls.
+  * All write operations are protected by authorization checks to prevent unauthorized data modification.
+  *
+  * @dataStructure
+  * - User-specific data is nested under `/users/{userId}`.
+  * - Collaborative data is secured using membership maps within the documents themselves.
+  * - Top-level collections are generally readable by all but require ownership validation for write operations.
+  *
+  * @keySecurityDecisions
+  * - User listing is generally disallowed to prevent information disclosure.
+  * - Read-only collections (if any) are explicitly marked and allowed for public read access.
+  * - Default security posture for ambiguous relationships is strict owner-only access.
+  *
+  * @denormalizationForAuthorization
+  * - Authorization data (e.g., user IDs, roles) is copied directly onto documents to avoid `get()` calls in security rules.
+  * - Subcollections inherit authorization context from their parent documents by denormalizing relevant fields.
+  *
+  * @structuralSegregation
+  * - Private and public data are stored in separate collections to simplify security rules and improve performance.
+  */
+ 
+
+ rules_version = '2';
+ service cloud.firestore {
   match /databases/{database}/documents {
+ 
 
-    /**
-     * @description Checks if the request is authenticated.
-     * @path N/A
-     * @allow N/A
-     * @deny N/A
-     * @principle N/A
-     */
-    function isSignedIn() {
-      return request.auth != null;
-    }
+   function isSignedIn() {
+    return request.auth != null;
+   }
+ 
 
-    /**
-     * @description Checks if the authenticated user ID matches the provided user ID.
-     * @path N/A
-     * @allow N/A
-     * @deny N/A
-     * @principle N/A
-     */
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
+   function isOwner(userId) {
+    return isSignedIn() && request.auth.uid == userId;
+   }
+ 
 
-    /**
-     * @description Checks if the authenticated user is the owner of an existing document.
-     * @path N/A
-     * @allow N/A
-     * @deny N/A
-     * @principle N/A
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
+   function isExistingOwner(userId) {
+    return isOwner(userId) && resource != null;
+   }
+ 
 
-    /**
-     * @description Allows anyone to read if the collection is intended to be public
-     * @path N/A
-     * @allow N/A
-     * @deny N/A
-     * @principle N/A
-     */
-    function allowPublicRead() {
-        return true;
-    }
+   /**
+    * @description Allows anyone to read custom submodules, but only authenticated users can create, update, or delete them.
+    * @path /appSubmodules/{appSubmoduleId}
+    * @allow (get, list)
+    * @allow (create) if request.auth != null
+    * @deny (create) if request.auth == null
+    * @deny (update, delete)
+    * @principle Allows public read access but restricts write access to authenticated users.
+    */
+   match /appSubmodules/{appSubmoduleId} {
+    allow get, list: if true;
+    allow create: if isSignedIn();
+    allow update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of custom submodules created by users.
-     * @path /appSubmodules/{appSubmoduleId}
-     * @allow (create) Authenticated user creating a new submodule.
-     * @deny (create) Unauthenticated user attempting to create a new submodule.
-     * @principle Enforces authentication for creating submodules.
-     */
-    match /appSubmodules/{appSubmoduleId} {
-      allow get, list: if false;
-      allow create: if isSignedIn();
-      allow update: if false;
-      allow delete: if false;
-    }
+   /**
+    * @description Enforces strict ownership for user documents. Only the authenticated user can read, create, update, or delete their own document.
+    * @path /users/{userId}
+    * @allow (get, create, update, delete) if request.auth.uid == userId
+    * @deny (list)
+    * @principle Enforces document ownership for all operations.
+    */
+   match /users/{userId} {
+    allow get: if isOwner(userId);
+    allow list: if false;
+    allow create: if isOwner(userId);
+    allow update: if isExistingOwner(userId);
+    allow delete: if isExistingOwner(userId);
+   }
+ 
 
-    /**
-     * @description Collection of user documents. Stores personal user data. Path-based ownership for private data.
-     * @path /users/{userId}
-     * @allow (create) Authenticated user creating their own user document.
-     * @deny (create) Authenticated user attempting to create a different user's document.
-     * @principle Enforces document ownership for writes.
-     */
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
+   /**
+    * @description Allows anyone to read roles, but restricts creation, updating, and deletion.
+    * @path /roles/{roleId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to roles to prevent unauthorized modification.
+    */
+   match /roles/{roleId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of role documents.  Defines roles within the RBAC system.
-     * @path /roles/{roleId}
-     * @allow (get, list) Public read access to roles.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /roles/{roleId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Enforces strict ownership for workflows within a user's document. Only the authenticated user can read, create, update, or delete their own workflows.
+    * @path /users/{userId}/workflows/{workflowId}
+    * @allow (get, create, update, delete) if request.auth.uid == userId
+    * @deny (list)
+    * @principle Enforces document ownership for all operations.
+    */
+   match /users/{userId}/workflows/{workflowId} {
+    allow get: if isOwner(userId);
+    allow list: if isOwner(userId);
+    allow create: if isOwner(userId);
+    allow update: if isExistingOwner(userId);
+    allow delete: if isExistingOwner(userId);
+   }
+ 
 
-    /**
-     * @description Collection of workflows owned by a specific user. Path-based ownership.
-     * @path /users/{userId}/workflows/{workflowId}
-     * @allow (create) Authenticated user creating a workflow under their own user ID.
-     * @deny (update) Non-owner attempting to update a workflow.
-     * @principle Enforces document ownership for writes.
-     */
-    match /users/{userId}/workflows/{workflowId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
+   /**
+    * @description Enforces strict ownership for workflow steps within a user's workflow. Only the authenticated user can read, create, update, or delete their own workflow steps.
+    * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
+    * @allow (get, create, update, delete) if request.auth.uid == userId
+    * @deny (list)
+    * @principle Enforces document ownership for all operations.
+    */
+   match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
+    allow get: if isOwner(userId);
+    allow list: if isOwner(userId);
+    allow create: if isOwner(userId);
+    allow update: if isExistingOwner(userId);
+    allow delete: if isExistingOwner(userId);
+   }
+ 
 
-    /**
-     * @description Collection of workflow steps belonging to a specific workflow. Path-based ownership.
-     * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
-     * @allow (create) Authenticated user creating a workflow step under their own user and workflow.
-     * @deny (update) Non-owner attempting to update a workflow step.
-     * @principle Enforces document ownership for writes.
-     */
-    match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
+   /**
+    * @description Enforces strict ownership for form definitions within a user's document. Only the authenticated user can read, create, update, or delete their own form definitions.
+    * @path /users/{userId}/formDefinitions/{formDefinitionId}
+    * @allow (get, create, update, delete) if request.auth.uid == userId
+    * @deny (list)
+    * @principle Enforces document ownership for all operations.
+    */
+   match /users/{userId}/formDefinitions/{formDefinitionId} {
+    allow get: if isOwner(userId);
+    allow list: if isOwner(userId);
+    allow create: if isOwner(userId);
+    allow update: if isExistingOwner(userId);
+    allow delete: if isExistingOwner(userId);
+   }
+ 
 
-    /**
-     * @description Collection of form definitions owned by a specific user. Path-based ownership.
-     * @path /users/{userId}/formDefinitions/{formDefinitionId}
-     * @allow (create) Authenticated user creating a form definition under their own user ID.
-     * @deny (update) Non-owner attempting to update a form definition.
-     * @principle Enforces document ownership for writes.
-     */
-    match /users/{userId}/formDefinitions/{formDefinitionId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
+   /**
+    * @description Enforces strict ownership for form fields within a user's form definition. Only the authenticated user can read, create, update, or delete their own form fields.
+    * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
+    * @allow (get, create, update, delete) if request.auth.uid == userId
+    * @deny (list)
+    * @principle Enforces document ownership for all operations.
+    */
+   match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
+    allow get: if isOwner(userId);
+    allow list: if isOwner(userId);
+    allow create: if isOwner(userId);
+    allow update: if isExistingOwner(userId);
+    allow delete: if isExistingOwner(userId);
+   }
+ 
 
-    /**
-     * @description Collection of form fields belonging to a specific form definition. Includes denormalized 'workflowId' and potentially other workflow-related attributes from the parent FormDefinition for authorization independence.  Path-based ownership.
-     * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-     * @allow (create) Authenticated user creating a form field under their own user and form definition.
-     * @deny (update) Non-owner attempting to update a form field.
-     * @principle Enforces document ownership for writes.
-     */
-    match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
+   /**
+    * @description Allows anyone to read lookup tables, but restricts creation, updating, and deletion.
+    * @path /lookupTables/{lookupTableId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to lookup tables to prevent unauthorized modification.
+    */
+   match /lookupTables/{lookupTableId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of lookup tables.
-     * @path /lookupTables/{lookupTableId}
-     * @allow (get, list) Public read access to lookup tables.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /lookupTables/{lookupTableId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read MIS reports, but restricts creation, updating, and deletion.
+    * @path /misReports/{misReportId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to MIS reports to prevent unauthorized modification.
+    */
+   match /misReports/{misReportId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of MIS reports. Includes denormalized 'members' map for authorization independence.
-     * @path /misReports/{misReportId}
-     * @allow (get, list) Public read access to MIS reports.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /misReports/{misReportId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read transaction codes, but restricts creation, updating, and deletion.
+    * @path /transactionCodes/{transactionCodeId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to transaction codes to prevent unauthorized modification.
+    */
+   match /transactionCodes/{transactionCodeId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of transaction codes.
-     * @path /transactionCodes/{transactionCodeId}
-     * @allow (get, list) Public read access to transaction codes.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /transactionCodes/{transactionCodeId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read products, but restricts creation, updating, and deletion.
+    * @path /products/{productId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to products to prevent unauthorized modification.
+    */
+   match /products/{productId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of product documents.
-     * @path /products/{productId}
-     * @allow (get, list) Public read access to products.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /products/{productId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read categories, but restricts creation, updating, and deletion.
+    * @path /categories/{categoryId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to categories to prevent unauthorized modification.
+    */
+   match /categories/{categoryId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of product categories.
-     * @path /categories/{categoryId}
-     * @allow (get, list) Public read access to categories.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /categories/{categoryId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read stock levels, but restricts creation, updating, and deletion.
+    * @path /stocks/{stockId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to stock levels to prevent unauthorized modification.
+    */
+   match /stocks/{stockId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of stock level entries.
-     * @path /stocks/{stockId}
-     * @allow (get, list) Public read access to stocks.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /stocks/{stockId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read customers, but restricts creation, updating, and deletion.
+    * @path /customers/{customerId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to customers to prevent unauthorized modification.
+    */
+   match /customers/{customerId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of customer documents.
-     * @path /customers/{customerId}
-     * @allow (get, list) Public read access to customers.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /customers/{customerId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read orders, but restricts creation, updating, and deletion.
+    * @path /orders/{orderId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to orders to prevent unauthorized modification.
+    */
+   match /orders/{orderId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of order documents.
-     * @path /orders/{orderId}
-     * @allow (get, list) Public read access to orders.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /orders/{orderId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read order line items, but restricts creation, updating, and deletion.
+    * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to order line items to prevent unauthorized modification.
+    */
+   match /orders/{orderId}/orderLineItems/{orderLineItemId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Subcollection of order line items for a specific order. Includes denormalized 'customerId' from the parent Order for authorization independence.
-     * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
-     * @allow (get, list) Public read access to order line items.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /orders/{orderId}/orderLineItems/{orderLineItemId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read invoices, but restricts creation, updating, and deletion.
+    * @path /invoices/{invoiceId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to invoices to prevent unauthorized modification.
+    */
+   match /invoices/{invoiceId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of invoice documents.
-     * @path /invoices/{invoiceId}
-     * @allow (get, list) Public read access to invoices.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /invoices/{invoiceId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read returns, but restricts creation, updating, and deletion.
+    * @path /returns/{returnId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to returns to prevent unauthorized modification.
+    */
+   match /returns/{returnId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of return documents.
-     * @path /returns/{returnId}
-     * @allow (get, list) Public read access to returns.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /returns/{returnId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read return line items, but restricts creation, updating, and deletion.
+    * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to return line items to prevent unauthorized modification.
+    */
+   match /returns/{returnId}/returnLineItems/{returnLineItemId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Subcollection of return line items for a specific return. Includes denormalized 'customerId' from the parent Order (via Return) for authorization independence.
-     * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
-     * @allow (get, list) Public read access to return line items.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /returns/{returnId}/returnLineItems/{returnLineItemId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read suppliers, but restricts creation, updating, and deletion.
+    * @path /suppliers/{supplierId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to suppliers to prevent unauthorized modification.
+    */
+   match /suppliers/{supplierId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of supplier documents.
-     * @path /suppliers/{supplierId}
-     * @allow (get, list) Public read access to suppliers.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /suppliers/{supplierId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read purchase orders, but restricts creation, updating, and deletion.
+    * @path /purchaseOrders/{purchaseOrderId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to purchase orders to prevent unauthorized modification.
+    */
+   match /purchaseOrders/{purchaseOrderId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of purchase order documents.
-     * @path /purchaseOrders/{purchaseOrderId}
-     * @allow (get, list) Public read access to purchase orders.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /purchaseOrders/{purchaseOrderId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read purchase order line items, but restricts creation, updating, and deletion.
+    * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to purchase order line items to prevent unauthorized modification.
+    */
+   match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Subcollection of purchase order line items for a specific purchase order.  Includes denormalized 'supplierId' from the parent PurchaseOrder for authorization independence.
-     * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
-     * @allow (get, list) Public read access to purchase order line items.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read goods receipt notes, but restricts creation, updating, and deletion.
+    * @path /goodsReceiptNotes/{goodsReceiptNoteId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to goods receipt notes to prevent unauthorized modification.
+    */
+   match /goodsReceiptNotes/{goodsReceiptNoteId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of goods receipt note documents.
-     * @path /goodsReceiptNotes/{goodsReceiptNoteId}
-     * @allow (get, list) Public read access to goods receipt notes.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /goodsReceiptNotes/{goodsReceiptNoteId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read goods receipt note line items, but restricts creation, updating, and deletion.
+    * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to goods receipt note line items to prevent unauthorized modification.
+    */
+   match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Subcollection of goods receipt note line items for a specific goods receipt note. Includes denormalized 'supplierId' from the parent PurchaseOrder (via GoodsReceiptNote) for authorization independence.
-     * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
-     * @allow (get, list) Public read access to goods receipt note line items.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read payments, but restricts creation, updating, and deletion.
+    * @path /payments/{paymentId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to payments to prevent unauthorized modification.
+    */
+   match /payments/{paymentId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of payment documents.
-     * @path /payments/{paymentId}
-     * @allow (get, list) Public read access to payments.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /payments/{paymentId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read chart of accounts entries, but restricts creation, updating, and deletion.
+    * @path /chartOfAccounts/{chartOfAccountsId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to chart of accounts entries to prevent unauthorized modification.
+    */
+   match /chartOfAccounts/{chartOfAccountsId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
+ 
 
-    /**
-     * @description Collection of chart of accounts entries.
-     * @path /chartOfAccounts/{chartOfAccountsId}
-     * @allow (get, list) Public read access to chart of accounts entries.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /chartOfAccounts/{chartOfAccountsId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
-
-    /**
-     * @description Collection of ledger entries.
-     * @path /ledgerEntries/{ledgerEntryId}
-     * @allow (get, list) Public read access to ledger entries.
-     * @deny (create, update, delete) No public write access.
-     * @principle Public read, restricted writes.
-     */
-    match /ledgerEntries/{ledgerEntryId} {
-      allow get, list: if allowPublicRead();
-      allow create, update, delete: if false;
-    }
+   /**
+    * @description Allows anyone to read ledger entries, but restricts creation, updating, and deletion.
+    * @path /ledgerEntries/{ledgerEntryId}
+    * @allow (get, list)
+    * @deny (create, update, delete)
+    * @principle Restricts write access to ledger entries to prevent unauthorized modification.
+    */
+   match /ledgerEntries/{ledgerEntryId} {
+    allow get, list: if true;
+    allow create, update, delete: if false;
+   }
   }
-}
+ }

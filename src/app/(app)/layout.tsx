@@ -1,18 +1,27 @@
+'use client';
 import type { Metadata } from 'next';
 import { Nav } from '@/components/nav';
 import { Header } from '@/components/header';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useAuth } from '@/firebase';
+import { initiateAnonymousSignIn } from '@/firebase/non-blocking-login';
 
-export const metadata: Metadata = {
-  title: 'Dashboard - SynergyFlow ERP',
-  description: 'A comprehensive ERP solution.',
-};
+// This is a client component, so metadata should be exported from a server component if needed.
+// For now, we'll keep it simple.
 
 export default function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const auth = useAuth();
+
+  useEffect(() => {
+    if (auth) {
+      initiateAnonymousSignIn(auth);
+    }
+  }, [auth]);
+
   return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
             <Nav />
