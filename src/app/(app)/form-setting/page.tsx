@@ -13,13 +13,16 @@ import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/no
 import { collection, serverTimestamp, doc } from "firebase/firestore";
 import type { AppSubmodule } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
 
 
 export default function FormSettingPage() {
     const [mainModule, setMainModule] = useState('');
     const [submoduleName, setSubmoduleName] = useState('');
+    const [selectedSubmodule, setSelectedSubmodule] = useState('');
     const firestore = useFirestore();
     const { toast } = useToast();
+    const router = useRouter();
 
     const submodulesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -74,6 +77,18 @@ export default function FormSettingPage() {
             title: "Submodule Deleted",
             description: "The submodule has been successfully deleted.",
         });
+    }
+
+    const handleDesignForm = () => {
+        if (!selectedSubmodule) {
+            toast({
+                variant: 'destructive',
+                title: "No Submodule Selected",
+                description: "Please select a submodule to design its form.",
+            });
+            return;
+        }
+        router.push(`/form-setting/${selectedSubmodule}/design`);
     }
 
   return (
@@ -182,7 +197,7 @@ export default function FormSettingPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             <Label htmlFor="design-submodule">Submodule</Label>
-            <Select>
+            <Select onValueChange={setSelectedSubmodule} value={selectedSubmodule}>
               <SelectTrigger id="design-submodule">
                 <SelectValue placeholder="Select a submodule" />
               </SelectTrigger>
@@ -192,7 +207,7 @@ export default function FormSettingPage() {
             </Select>
           </CardContent>
           <CardFooter>
-            <Button>Design Form</Button>
+            <Button onClick={handleDesignForm}>Design Form</Button>
           </CardFooter>
         </Card>
 

@@ -53,4 +53,11 @@ export type AppSubmodule = {
   createdAt: any;
 }
 
-    
+export type FormField = {
+  id?: string;
+  formDefinitionId: string; // Corresponds to submoduleId
+  name: string;
+  type: string; // e.g., 'text', 'number', 'date'
+  // validationRules?: string;
+  // lookupTableId?: string;
+}
