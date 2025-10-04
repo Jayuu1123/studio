@@ -59,11 +59,10 @@ const statusConfig: {
 
 
 export default function TransactionSubmodulePage({
-  params,
+  params: { submodule },
 }: {
   params: { submodule: string };
 }) {
-  const { submodule } = params;
   const submoduleName = unslugify(submodule);
   const firestore = useFirestore();
   const router = useRouter();

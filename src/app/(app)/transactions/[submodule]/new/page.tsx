@@ -47,11 +47,10 @@ import React, { useEffect, useState } from 'react';
 
 
 export default function NewTransactionEntryPage({
-  params,
+  params: { submodule },
 }: {
   params: { submodule: string };
 }) {
-  const { submodule } = params;
   const submoduleName = unslugify(submodule);
   const firestore = useFirestore();
   const { toast } = useToast();
