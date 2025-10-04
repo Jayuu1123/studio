@@ -26,6 +26,12 @@ const transactionModules = [
       { name: 'Material Issue', code: 'MI', entries: 754, pending: 1725, href: '#' },
       { name: 'Material Receipt', code: 'MR', entries: 275, pending: 3262, href: '#' },
     ]
+  },
+  {
+    category: 'Form Setting',
+    items: [
+      { name: 'Create Form', code: 'CF', entries: 5, pending: 10, href: '#' },
+    ]
   }
 ];
 
