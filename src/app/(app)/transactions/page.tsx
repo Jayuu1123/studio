@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import Link from 'next/link';
+import { slugify } from "@/lib/utils";
 
 const transactionModules = [
   {
@@ -40,7 +41,7 @@ export default function TransactionsPage() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {module.items.map((item) => (
                 <Card key={item.name} className="hover:shadow-lg transition-shadow">
-                    <Link href={item.href} className="block h-full">
+                    <Link href={`/transactions/${slugify(item.name)}`} className="block h-full">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-3">
                                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold">{item.code}</span>

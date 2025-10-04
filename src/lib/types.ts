@@ -22,3 +22,13 @@ export type Product = {
   price: number;
   status: 'in-stock' | 'low-stock' | 'out-of-stock';
 };
+
+export type RequisitionEntry = {
+    status: 'A' | 'D' | 'L' | 'P'; // Approved, Denied, Locked, Pending
+    user: string;
+    docNo: string;
+    category: string;
+    date: Date;
+    department: string;
+    productionItem: string;
+}
