@@ -39,7 +39,7 @@ import { unslugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useFirestore } from '@/firebase';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-import { collection, serverTimestamp } from 'firebase/firestore';
+import { collection, serverTimestamp, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import type { TransactionEntry } from '@/lib/types';
@@ -58,29 +58,48 @@ export default function NewTransactionEntryPage({
   const router = useRouter();
 
 
-  const handleSaveEntry = () => {
+  const handleSaveEntry = async () => {
     if (!firestore) {
       toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to the database.' });
       return;
     }
+    
+    const entriesCollection = collection(firestore, 'transactionEntries');
 
+    // 1. Find the latest document number for the current submodule
+    const q = query(
+      entriesCollection,
+      where('submodule', '==', submoduleName),
+      orderBy('docNo_sequential', 'desc'),
+      limit(1)
+    );
+
+    const querySnapshot = await getDocs(q);
+    let nextDocNo = 1;
+    if (!querySnapshot.empty) {
+      const latestEntry = querySnapshot.docs[0].data() as TransactionEntry;
+      nextDocNo = (latestEntry.docNo_sequential || 0) + 1;
+    }
+
+    // 2. Create the new entry with the next sequential number
     const newEntry: Omit<TransactionEntry, 'id'> = {
         submodule: submoduleName,
         status: 'P',
         user: 'Current User', // Placeholder
-        docNo: `DOC-${Date.now()}`, // Placeholder
+        docNo: `tic/25-26/${nextDocNo}`,
+        docNo_sequential: nextDocNo,
         category: 'Requisition', // Placeholder
         date: serverTimestamp(),
         department: 'Store', // Placeholder
         productionItem: 'N/A' // Placeholder
     };
-
-    const entriesCollection = collection(firestore, 'transactionEntries');
+    
+    // 3. Save the new entry (non-blocking)
     addDocumentNonBlocking(entriesCollection, newEntry);
     
     toast({
         title: 'Entry Saved',
-        description: `New entry for ${submoduleName} has been saved.`,
+        description: `New entry for ${submoduleName} has been saved with Doc No: ${newEntry.docNo}`,
     });
 
     router.push(`/transactions/${submodule}`);
@@ -273,3 +292,5 @@ export default function NewTransactionEntryPage({
     </div>
   );
 }
+
+    

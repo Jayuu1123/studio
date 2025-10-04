@@ -39,6 +39,7 @@ export type TransactionEntry = {
   status: 'A' | 'D' | 'L' | 'P'; // Approved, Denied, Locked, Pending
   user: string;
   docNo: string;
+  docNo_sequential?: number;
   category: string;
   date: any;
   department: string;
@@ -51,3 +52,5 @@ export type AppSubmodule = {
   mainModule: string;
   createdAt: any;
 }
+
+    
