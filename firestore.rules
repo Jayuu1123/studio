@@ -2,322 +2,533 @@
  * @fileoverview Firestore Security Rules for SynergyFlow ERP System.
  *
  * Core Philosophy:
- * This ruleset implements a hybrid security model, combining strict user-ownership for personal data with shared access via membership maps for collaborative data. It prioritizes authorization independence through extensive denormalization, avoiding costly and complex `get()` operations within the rules.
+ * This ruleset enforces a hybrid security model. User-specific data is secured via path-based ownership under `/users/{userId}`.
+ * Other data is secured either using membership maps or is publicly readable. All write operations require authentication.
  *
  * Data Structure:
- * - User-specific data (Workflows, FormDefinitions, etc.) is nested under `/users/{userId}`.
- * - Top-level collections like `/products`, `/categories`, etc., store application-wide data.
- * - Subcollections (e.g., `/orders/{orderId}/orderLineItems/{orderLineItemId}`) may contain denormalized data from parent documents to enable authorization independence.
+ * - User-specific data is nested under `/users/{userId}`.
+ * - Collaborative data uses membership maps on the document being secured.
+ * - Top-level collections are used for global data or publicly readable data.
  *
  * Key Security Decisions:
- * - All user-specific data enforces strict ownership.
- * - List operations on user-owned collections are allowed for the owner.
- * - Top-level collections are generally accessible with owner-only writes *if* an ownership field is present; otherwise write operations are disabled.
+ * - Listing of the `/appSubmodules` collection is denied to all users due to the error report.
+ * - Ownership is strictly enforced for user-specific data.
+ * - Public read access is granted to some top-level collections.
  *
  * Denormalization for Authorization:
- * - Where subcollection access depends on parent document properties (e.g., a user's role in a project), the relevant properties are denormalized into the subcollection documents. This avoids using `get()` calls in security rules.
- *   - Example: `orderLineItems` includes `customerId` from `Order` to authorize `OrderLineItem` operations directly.
+ * - Subcollections like `/orders/{orderId}/orderLineItems/{orderLineItemId}` denormalize 'customerId' from the parent Order to avoid needing to fetch the Order document in security rules.
+ * - Subcollections like `/returns/{returnId}/returnLineItems/{returnLineItemId}` denormalize 'customerId' from the parent Order (via Return) to avoid needing to fetch the Order or Return document in security rules.
+ * - Subcollections like `/purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}` denormalize 'supplierId' from the parent PurchaseOrder to avoid needing to fetch the PurchaseOrder document in security rules.
+ * - Subcollections like `/goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}` denormalize 'supplierId' from the parent PurchaseOrder (via GoodsReceiptNote) to avoid needing to fetch the PurchaseOrder or GoodsReceiptNote document in security rules.
+ * - The `formFields` subcollection denormalizes 'workflowId' for rules independence.
  *
  * Structural Segregation:
- * - This ruleset assumes data with differing access control needs is stored in separate collections.
+ * - Public and private reports would be stored in separate collections to avoid complex rule logic (not explicitly implemented here but a general principle).
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is authenticated.
+     * @description Defines access rules for the appSubmodules collection. Listing is explicitly denied due to reported errors.
+     * @path /appSubmodules/{appSubmoduleId}
+     * @allow get: if isSignedIn();
+     * @deny list: Always denied to prevent unauthorized listing.
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @principle Denies listing of the entire collection, allows only authenticated access to individual documents.
      */
-    function isSignedIn() {
-      return request.auth != null;
+    match /appSubmodules/{appSubmoduleId} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Checks if the authenticated user is the owner of the document.
-     */
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the authenticated user is the existing owner of the document.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource.data.userId == request.auth.uid;
-    }
-
-    /**
-     * @description Rules for user documents.
+     * @description Defines access rules for user documents.
      * @path /users/{userId}
-     * @allow (create) User 'testUser' can create their own user document.
-     * @allow (get, list) User 'testUser' can read their own user document.
-     * @deny (create) User 'otherUser' cannot create a user document with 'testUser's ID.
-     * @deny (update, delete) User 'otherUser' cannot update or delete User 'testUser's document.
-     * @principle Enforces document ownership for writes.
+     * @allow get: if isOwner(userId);
+     * @allow list: if false;
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.auth.uid == userId;
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if request.auth.uid == userId;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for role documents.
+     * @description Defines access rules for roles documents.
      * @path /roles/{roleId}
-     * @allow (get, list) Anyone can read role documents.
-     * @deny (create, update, delete) No one can create, update, or delete role documents through the client.
-     * @principle Read-only access for role documents.
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /roles/{roleId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for workflows owned by a specific user.
+     * @description Defines access rules for workflows owned by a specific user.
      * @path /users/{userId}/workflows/{workflowId}
-     * @allow (create) User 'testUser' can create a workflow under their user document.
-     * @allow (get, list) User 'testUser' can read workflows under their user document.
-     * @deny (create) User 'otherUser' cannot create a workflow under User 'testUser's document.
-     * @deny (update, delete) User 'otherUser' cannot update or delete workflows under User 'testUser's document.
-     * @principle Enforces document ownership for writes.
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership within the user's data tree.
      */
     match /users/{userId}/workflows/{workflowId} {
-      allow get, list: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for workflow steps belonging to a specific workflow.
+     * @description Defines access rules for workflow steps belonging to a specific workflow.
      * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
-     * @allow (create) User 'testUser' can create a workflow step under their workflow.
-     * @allow (get, list) User 'testUser' can read workflow steps under their workflow.
-     * @deny (create) User 'otherUser' cannot create a workflow step under User 'testUser's workflow.
-     * @deny (update, delete) User 'otherUser' cannot update or delete workflow steps under User 'testUser's workflow.
-     * @principle Enforces document ownership for writes.
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership within the user's data tree.
      */
     match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
-      allow get, list: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for form definitions owned by a specific user.
+     * @description Defines access rules for form definitions owned by a specific user.
      * @path /users/{userId}/formDefinitions/{formDefinitionId}
-     * @allow (create) User 'testUser' can create a form definition under their user document.
-     * @allow (get, list) User 'testUser' can read form definitions under their user document.
-     * @deny (create) User 'otherUser' cannot create a form definition under User 'testUser's document.
-     * @deny (update, delete) User 'otherUser' cannot update or delete form definitions under User 'testUser's document.
-     * @principle Enforces document ownership for writes.
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership within the user's data tree.
      */
     match /users/{userId}/formDefinitions/{formDefinitionId} {
-      allow get, list: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for form fields belonging to a specific form definition.
+     * @description Defines access rules for form fields belonging to a specific form definition.
      * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-     * @allow (create) User 'testUser' can create a form field under their form definition.
-     * @allow (get, list) User 'testUser' can read form fields under their form definition.
-     * @deny (create) User 'otherUser' cannot create a form field under User 'testUser's form definition.
-     * @deny (update, delete) User 'otherUser' cannot update or delete form fields under User 'testUser's form definition.
-     * @principle Enforces document ownership for writes.
+     * @allow get: if isOwner(userId);
+     * @allow list: if isOwner(userId);
+     * @allow create: if isOwner(userId);
+     * @allow update: if isExistingOwner(userId);
+     * @allow delete: if isExistingOwner(userId);
+     * @principle Enforces document ownership within the user's data tree.
      */
     match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
-      allow get, list: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
       allow delete: if isOwner(userId);
     }
 
     /**
-     * @description Rules for lookup tables.
+     * @description Defines access rules for lookup tables.
      * @path /lookupTables/{lookupTableId}
-     * @allow (get, list) Anyone can read lookup tables.
-     * @deny (create, update, delete) No one can create, update, or delete lookup tables.
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /lookupTables/{lookupTableId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for MIS reports.
+     * @description Defines access rules for MIS reports.
      * @path /misReports/{misReportId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /misReports/{misReportId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Rules for transaction codes.
+     * @description Defines access rules for transaction codes.
      * @path /transactionCodes/{transactionCodeId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /transactionCodes/{transactionCodeId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for product documents.
+     * @description Defines access rules for product documents.
      * @path /products/{productId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /products/{productId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for category documents.
+     * @description Defines access rules for product categories.
      * @path /categories/{categoryId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /categories/{categoryId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for stock documents.
+     * @description Defines access rules for stock level entries.
      * @path /stocks/{stockId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /stocks/{stockId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for customer documents.
+     * @description Defines access rules for customer documents.
      * @path /customers/{customerId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /customers/{customerId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for order documents.
+     * @description Defines access rules for order documents.
      * @path /orders/{orderId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /orders/{orderId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for order line item documents.
+     * @description Defines access rules for order line items for a specific order.
      * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /orders/{orderId}/orderLineItems/{orderLineItemId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for invoice documents.
+     * @description Defines access rules for invoice documents.
      * @path /invoices/{invoiceId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /invoices/{invoiceId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for return documents.
+     * @description Defines access rules for return documents.
      * @path /returns/{returnId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /returns/{returnId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for return line item documents.
+     * @description Defines access rules for return line items for a specific return.
      * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /returns/{returnId}/returnLineItems/{returnLineItemId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for supplier documents.
+     * @description Defines access rules for supplier documents.
      * @path /suppliers/{supplierId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /suppliers/{supplierId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for purchase order documents.
+     * @description Defines access rules for purchase order documents.
      * @path /purchaseOrders/{purchaseOrderId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /purchaseOrders/{purchaseOrderId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for purchase order line item documents.
+     * @description Defines access rules for purchase order line items for a specific purchase order.
      * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for goods receipt note documents.
+     * @description Defines access rules for goods receipt note documents.
      * @path /goodsReceiptNotes/{goodsReceiptNoteId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /goodsReceiptNotes/{goodsReceiptNoteId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for goods receipt note line item documents.
+     * @description Defines access rules for goods receipt note line items for a specific goods receipt note.
      * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for payment documents.
+     * @description Defines access rules for payment documents.
      * @path /payments/{paymentId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /payments/{paymentId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
     /**
-     * @description Rules for chart of accounts documents.
+     * @description Defines access rules for chart of accounts entries.
      * @path /chartOfAccounts/{chartOfAccountsId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /chartOfAccounts/{chartOfAccountsId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
 
-    /**
-     * @description Rules for ledger entry documents.
+        /**
+     * @description Defines access rules for ledger entries.
      * @path /ledgerEntries/{ledgerEntryId}
+     * @allow get: if true;
+     * @allow list: if true;
+     * @allow create: if false; // TODO: Add admin role validation
+     * @allow update: if false; // TODO: Add admin role validation
+     * @allow delete: if false; // TODO: Add admin role validation
+     * @principle Public read access, owner-only writes (currently disabled).
      */
     match /ledgerEntries/{ledgerEntryId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if false; // TODO: Add admin role validation
+      allow update: if false; // TODO: Add admin role validation
+      allow delete: if false; // TODO: Add admin role validation
     }
+
+  }
+
+  // Helper function to determine if the user is signed in.
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  // Helper function to determine if the user is the owner of the document.
+  function isOwner(userId) {
+    return request.auth.uid == userId;
+  }
+
+  // Helper function to determine if the user is the existing owner of the document, ensures existence.
+  function isExistingOwner(userId) {
+    return request.auth.uid == userId && resource != null;
   }
 }
