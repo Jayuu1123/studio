@@ -71,6 +71,7 @@ export default function AppLayout({
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const pathname = usePathname();
+  const router = useRouter();
   const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
 
@@ -104,7 +105,7 @@ export default function AppLayout({
   }, [activeLicenses]);
 
    useEffect(() => {
-        if (userData && userData.status === 'disabled') {
+        if (userData?.status === 'disabled') {
             if (auth) {
                 toast({
                     variant: 'destructive',
@@ -114,7 +115,23 @@ export default function AppLayout({
                 // The wall will be displayed, and the user can log out from there.
             }
         }
-    }, [userData, auth, toast]);
+        
+        const clientSessionId = sessionStorage.getItem('userSessionId');
+        if (userData && clientSessionId && userData.sessionId && userData.sessionId !== clientSessionId) {
+             if (auth) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Session Expired',
+                    description: 'You have been logged out because you signed in on another device.',
+                });
+                signOut(auth).then(() => {
+                    sessionStorage.removeItem('userSessionId');
+                    router.push('/');
+                });
+            }
+        }
+
+    }, [userData, auth, toast, router]);
 
   useEffect(() => {
     const setupAdmin = async () => {
@@ -179,3 +196,5 @@ export default function AppLayout({
         </div>
   );
 }
+
+    

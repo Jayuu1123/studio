@@ -12,6 +12,7 @@ export type User = {
   email: string;
   roles: string[];
   status: 'active' | 'disabled';
+  sessionId?: string;
 }
 
 export type Role = {
@@ -103,3 +104,5 @@ export type License = {
   // We can add a field to join with the user collection for display
   userEmail?: string; 
 };
+
+    

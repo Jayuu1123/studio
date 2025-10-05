@@ -6,12 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { placeholderImages } from '@/lib/placeholder-images';
-import { useState }
-from 'react';
-import { useAuth } from '@/firebase';
+import { useState } from 'react';
+import { useAuth, useFirestore } from '@/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { doc, updateDoc } from 'firebase/firestore';
+import { v4 as uuidv4 } from 'uuid';
 
 function Logo() {
   return (
@@ -39,12 +40,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('saadmin');
   const [isLoading, setIsLoading] = useState(false);
   const auth = useAuth();
+  const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
 
 
   const handleLogin = async () => {
-    if (!auth) {
+    if (!auth || !firestore) {
         toast({
             variant: "destructive",
             title: "Authentication Error",
@@ -64,9 +66,21 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-        await signInWithEmailAndPassword(auth, email, password);
-        // The onAuthStateChanged listener in the provider will handle the redirect on success.
-        // We will navigate from here.
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Generate a new session ID
+        const newSessionId = uuidv4();
+        
+        // Update the user's document in Firestore with the new session ID
+        const userDocRef = doc(firestore, 'users', user.uid);
+        await updateDoc(userDocRef, {
+            sessionId: newSessionId,
+        });
+
+        // Store the session ID in the client's session storage
+        sessionStorage.setItem('userSessionId', newSessionId);
+        
         router.push('/dashboard');
 
     } catch (error: any) {
@@ -137,3 +151,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

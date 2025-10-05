@@ -375,6 +375,10 @@
             "type": "string",
             "enum": ["active", "disabled"],
             "description": "The current status of the user account."
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "The unique identifier for the user's current login session."
         }
       },
       "required": [
@@ -1511,3 +1515,5 @@
     
 
   
+
+    
