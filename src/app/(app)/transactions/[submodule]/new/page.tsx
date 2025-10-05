@@ -42,7 +42,7 @@ import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import type { TransactionEntry, FormField, AppSubmodule } from '@/lib/types';
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 
 
 function DynamicFormField({ field, value, onChange, disabled }: { field: FormField, value: any, onChange: (fieldId: string, value: any) => void, disabled: boolean }) {
@@ -116,7 +116,14 @@ export default function NewTransactionEntryPage() {
       lineItems: [{}], // Start with one empty line item
   });
   
+  const [initialFormData, setInitialFormData] = useState<Partial<TransactionEntry> | null>(null);
   const [isEditing, setIsEditing] = useState(!editId);
+
+  // Use a ref to keep the latest formData for the cleanup function
+  const formDataRef = useRef(formData);
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   const submoduleQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -173,8 +180,45 @@ export default function NewTransactionEntryPage() {
         }
 
         setFormData(dataToLoad);
+        // Store a deep copy for later comparison
+        setInitialFormData(JSON.parse(JSON.stringify(dataToLoad)));
     }
   }, [loadedEntry, duplicateId]);
+
+
+  // Effect for auto-saving as draft on navigation
+  useEffect(() => {
+    return () => {
+      // This is the cleanup function that runs when the component unmounts
+      const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
+      
+      if (isEditing && editId && hasChanged && firestore) {
+        console.log("Auto-saving entry as draft...");
+        const docRef = doc(firestore, 'transactionEntries', editId);
+        
+        // Create a copy of the data and set status to 'P' for Pending/Draft
+        const dataToSave = { ...formDataRef.current, status: 'P' };
+        
+        // Convert dates back to Timestamps for Firestore
+        const convertDatesToTimestamps = (obj: any) => {
+            for (const key in obj) {
+                if (obj[key] instanceof Date) {
+                    obj[key] = Timestamp.fromDate(obj[key]);
+                } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                    convertDatesToTimestamps(obj[key]);
+                }
+            }
+        };
+        convertDatesToTimestamps(dataToSave);
+        
+        setDocumentNonBlocking(docRef, dataToSave, { merge: true });
+        toast({
+          title: "Draft Saved",
+          description: `Your changes to ${dataToSave.docNo} have been automatically saved as a draft.`,
+        });
+      }
+    };
+  }, [isEditing, editId, initialFormData, firestore]);
 
 
   const handleSaveEntry = async (submissionStatus: 'P' | 'A') => {
@@ -183,6 +227,9 @@ export default function NewTransactionEntryPage() {
       return;
     }
     
+    // Set a flag to prevent auto-save on manual save
+    setInitialFormData(null);
+
     const finalData = JSON.parse(JSON.stringify(formData));
     finalData.status = submissionStatus;
 
