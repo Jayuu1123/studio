@@ -2,9 +2,7 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import Link from 'next/link';
-import { slugify } from "@/lib/utils";
 import {
-  FileText,
   ShoppingCart,
   Package,
   Briefcase,
@@ -13,8 +11,9 @@ import {
 } from 'lucide-react';
 import type { AppSubmodule } from "@/lib/types";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { useEffect, useState, ReactNode } from "react";
+import { collection } from "firebase/firestore";
+import { ReactNode } from "react";
+import { SubmoduleCard } from "@/components/submodule-card";
 
 // Helper function to group submodules by their mainModule
 const groupSubmodules = (submodules: AppSubmodule[]) => {
@@ -27,10 +26,6 @@ const groupSubmodules = (submodules: AppSubmodule[]) => {
         return acc;
     }, {} as { [key: string]: AppSubmodule[] });
 };
-
-interface SubmoduleCardProps {
-    submodule: AppSubmodule;
-}
 
 const coreModules: { name: string; icon: ReactNode; href: string }[] = [
     { name: "Sales", icon: <ShoppingCart className="h-4 w-4" />, href: "/sales"},
@@ -53,66 +48,6 @@ function CoreModuleCard({ name, icon, href }: { name: string; icon: ReactNode; h
                     </div>
                     <div className="text-sm text-muted-foreground">
                         Access the {name} module.
-                    </div>
-                </CardContent>
-            </Link>
-        </Card>
-    );
-}
-
-function SubmoduleCard({ submodule }: SubmoduleCardProps) {
-    const firestore = useFirestore();
-    const [counts, setCounts] = useState({ entries: 0, pending: 0 });
-
-    useEffect(() => {
-        const fetchCounts = async () => {
-            if (!firestore || !submodule.name) return;
-
-            try {
-                // Get total entries
-                const entriesQuery = query(collection(firestore, 'transactionEntries'), where('submodule', '==', submodule.name));
-                const entriesSnapshot = await getDocs(entriesQuery);
-                const totalEntries = entriesSnapshot.size;
-
-                // Get pending entries
-                const pendingQuery = query(
-                    collection(firestore, 'transactionEntries'),
-                    where('submodule', '==', submodule.name),
-                    where('status', '==', 'P')
-                );
-                const pendingSnapshot = await getDocs(pendingQuery);
-                const pendingEntries = pendingSnapshot.size;
-
-                setCounts({ entries: totalEntries, pending: pendingEntries });
-
-            } catch (error) {
-                console.error(`Failed to fetch counts for ${submodule.name}:`, error)
-            }
-        };
-
-        fetchCounts();
-    }, [firestore, submodule.name]);
-
-
-    return (
-        <Card className="hover:shadow-lg transition-shadow w-full">
-            <Link href={`/transactions/${slugify(submodule.name)}`} className="block h-full">
-                <CardContent className="p-4 flex flex-col justify-between h-full">
-                    <div className="flex items-center gap-3 mb-2">
-                         <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-sm font-semibold">
-                            <FileText className="h-4 w-4" />
-                        </span>
-                        <CardTitle className="text-base font-medium">{submodule.name}</CardTitle>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                        <div>
-                            <p className="text-green-600">Entries</p>
-                            <p className="text-xl font-bold">{counts.entries}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-red-600">Pendings</p>
-                            <p className="text-xl font-bold">{counts.pending}</p>
-                        </div>
                     </div>
                 </CardContent>
             </Link>
