@@ -39,7 +39,7 @@ const navItems = [
   { href: '/form-setting', icon: FileText, label: 'Form Setting' },
 ];
 
-export function Nav() {
+export function Nav({ isLicensed }: { isLicensed: boolean | null }) {
   const pathname = usePathname();
 
   return (
@@ -64,23 +64,28 @@ export function Nav() {
           <span className="sr-only">SynergyFlow ERP</span>
         </Link>
         <TooltipProvider>
-          {navItems.map((item) => (
-            <Tooltip key={item.href}>
-              <TooltipTrigger asChild>
-                <Link
-                  href={item.href}
-                  className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8',
-                    pathname.startsWith(item.href) && 'bg-accent text-accent-foreground'
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span className="sr-only">{item.label}</span>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right">{item.label}</TooltipContent>
-            </Tooltip>
-          ))}
+          {navItems.map((item) => {
+            const isDisabled = isLicensed === false;
+            return (
+                <Tooltip key={item.href}>
+                <TooltipTrigger asChild>
+                    <Link
+                    href={isDisabled ? '#' : item.href}
+                    className={cn(
+                        'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8',
+                        pathname.startsWith(item.href) && !isDisabled && 'bg-accent text-accent-foreground',
+                        isDisabled && 'pointer-events-none opacity-30'
+                    )}
+                    aria-disabled={isDisabled}
+                    >
+                    <item.icon className="h-5 w-5" />
+                    <span className="sr-only">{item.label}</span>
+                    </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">{isDisabled ? 'License required' : item.label}</TooltipContent>
+                </Tooltip>
+            )
+          })}
         </TooltipProvider>
       </nav>
       <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">

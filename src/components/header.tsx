@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { TransactionCodeSearch } from './transaction-code-search';
 import { UserNav } from './user-nav';
+import { cn } from '@/lib/utils';
 
 const mobileNavItems = [
     { href: '/dashboard', icon: Home, label: 'Dashboard' },
@@ -99,7 +100,7 @@ function BreadcrumbNav() {
 }
 
 
-export function Header() {
+export function Header({ isLicensed }: { isLicensed: boolean | null }) {
   const pathname = usePathname();
   
   return (
@@ -131,20 +132,23 @@ export function Header() {
               </svg>
               <span className="sr-only">SynergyFlow ERP</span>
             </Link>
-            {mobileNavItems.map((item) => (
-                <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-4 px-2.5 ${
-                        pathname.startsWith(item.href)
-                        ? 'text-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                    <item.icon className="h-5 w-5" />
-                    {item.label}
-                </Link>
-            ))}
+            {mobileNavItems.map((item) => {
+                const isDisabled = isLicensed === false && !item.href.startsWith('/settings');
+                 return (
+                    <Link
+                        key={item.href}
+                        href={isDisabled ? '#' : item.href}
+                        className={cn('flex items-center gap-4 px-2.5',
+                            pathname.startsWith(item.href) && !isDisabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                            isDisabled && 'pointer-events-none opacity-30'
+                        )}
+                        aria-disabled={isDisabled}
+                    >
+                        <item.icon className="h-5 w-5" />
+                        {item.label}
+                    </Link>
+                );
+            })}
           </nav>
         </SheetContent>
       </Sheet>
