@@ -36,12 +36,14 @@ import { collection, doc } from 'firebase/firestore';
 import type { Role } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
+import { useRouter } from 'next/navigation';
 
 export default function RolesPage() {
   const [roleName, setRoleName] = useState('');
   const [roleDescription, setRoleDescription] = useState('');
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
 
   const rolesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -88,6 +90,10 @@ export default function RolesPage() {
       title: 'Role Deleted',
       description: 'The role has been successfully deleted.',
     });
+  };
+  
+  const handleManagePermissions = (roleId: string) => {
+    router.push(`/settings/roles/${roleId}`);
   };
 
   return (
@@ -170,7 +176,9 @@ export default function RolesPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem>Manage Permissions</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => role.id && handleManagePermissions(role.id)}>
+                            Manage Permissions
+                          </DropdownMenuItem>
                           <DropdownMenuItem>Edit</DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => role.id && handleDeleteRole(role.id)}
