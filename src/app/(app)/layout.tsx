@@ -11,10 +11,11 @@ import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import type { License, User, Role, PermissionSet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ShieldAlert, UserX } from 'lucide-react';
+import { ShieldAlert, UserX, Loader2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { slugify } from '@/lib/utils';
+import { v4 as uuidv4 } from 'uuid';
 
 function LicenseWall() {
     return (
@@ -251,6 +252,14 @@ export default function AppLayout({
     fetchPermissions();
   }, [firestore, userData, isUserLoading]);
 
+  if (isUserLoading || isLoadingPermissions) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   if (userData && userData.status === 'disabled') {
     return <DisabledAccountWall />;
   }
@@ -273,13 +282,13 @@ export default function AppLayout({
 
   return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
-            {!isLoadingPermissions && <Nav isLicensed={isLicensed} permissions={permissions} />}
+            <Nav isLicensed={isLicensed} permissions={permissions} />
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
-                {!isLoadingPermissions && <Header isLicensed={isLicensed} permissions={permissions} />}
+                <Header isLicensed={isLicensed} permissions={permissions} />
                 <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 relative">
                     {shouldShowWall && <LicenseWall />}
                     <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
-                         {isLoadingPermissions ? <div>Loading permissions...</div> : childrenWithPermissions}
+                         {childrenWithPermissions}
                     </div>
                 </main>
             </div>
