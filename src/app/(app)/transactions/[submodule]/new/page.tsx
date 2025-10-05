@@ -163,11 +163,13 @@ export default function NewTransactionEntryPage() {
         if (obj instanceof Timestamp) {
             return obj.toDate();
         }
-        const newObj: { [key: string]: any } = {};
-        for (const key in obj) {
-            newObj[key] = recursiveConvertToDate(obj[key]);
+        if(Object.prototype.toString.call(obj) === '[object Object]') {
+            const newObj: { [key: string]: any } = {};
+            for (const key in obj) {
+                newObj[key] = recursiveConvertToDate(obj[key]);
+            }
+            return newObj;
         }
-        return newObj;
     }
     return obj;
   };
@@ -203,17 +205,19 @@ export default function NewTransactionEntryPage() {
     if (Array.isArray(obj)) {
         return obj.map(item => recursiveConvertToTimestamp(item));
     }
-    if (typeof obj === 'object') {
+    if (typeof obj === 'object' && !(obj instanceof Timestamp)) {
         const newObj: { [key: string]: any } = {};
         for (const key in obj) {
             const value = obj[key];
             if (value instanceof Date) {
                 newObj[key] = Timestamp.fromDate(value);
             } else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
-                // Check for ISO string from JSON.stringify(Date)
                 newObj[key] = Timestamp.fromDate(new Date(value));
-            } else {
+            } else if (typeof value === 'object') {
                 newObj[key] = recursiveConvertToTimestamp(value);
+            }
+             else {
+                newObj[key] = value;
             }
         }
         return newObj;
@@ -223,8 +227,6 @@ export default function NewTransactionEntryPage() {
   
  const saveCurrentStateAsDraft = useCallback(async (currentData: Partial<TransactionEntry>) => {
     if (!firestore || !submoduleId) return null;
-
-    manualSaveRef.current = true;
 
     // Create a deep copy to avoid mutating the original object and convert dates
     const dataToSave = recursiveConvertToTimestamp(JSON.parse(JSON.stringify(currentData)));
@@ -250,7 +252,7 @@ export default function NewTransactionEntryPage() {
       
       const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
       
-      if (isEditing && hasChanged && formDataRef.current.id) {
+      if (isEditing && hasChanged && formDataRef.current.status !== 'A') {
         saveCurrentStateAsDraft(formDataRef.current);
         toast({
           title: "Draft Saved",

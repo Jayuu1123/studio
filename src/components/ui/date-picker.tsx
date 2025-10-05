@@ -15,15 +15,11 @@ import {
 
 interface DatePickerProps {
     date?: Date;
-    setDate?: (date: Date | undefined) => void;
+    setDate: (date: Date | undefined) => void;
+    disabled?: boolean;
 }
 
-export function DatePicker({ date, setDate }: DatePickerProps) {
-  const [internalDate, setInternalDate] = React.useState<Date>()
-  const isControlled = date !== undefined && setDate !== undefined;
-
-  const displayDate = isControlled ? date : internalDate;
-  const handleSelectDate = isControlled ? setDate : setInternalDate;
+export function DatePicker({ date, setDate, disabled }: DatePickerProps) {
 
   return (
     <Popover>
@@ -32,18 +28,19 @@ export function DatePicker({ date, setDate }: DatePickerProps) {
           variant={"outline"}
           className={cn(
             "w-full justify-start text-left font-normal",
-            !displayDate && "text-muted-foreground"
+            !date && "text-muted-foreground"
           )}
+          disabled={disabled}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {displayDate ? format(displayDate, "PPP") : <span>Pick a date</span>}
+          {date ? format(date, "PPP") : <span>Pick a date</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
         <Calendar
           mode="single"
-          selected={displayDate}
-          onSelect={handleSelectDate}
+          selected={date}
+          onSelect={setDate}
           initialFocus
         />
       </PopoverContent>

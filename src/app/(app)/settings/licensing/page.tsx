@@ -31,13 +31,13 @@ import { collection, doc, serverTimestamp } from 'firebase/firestore';
 import type { License } from "@/lib/types";
 import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
-import { AddLicenseDialog } from "@/components/settings/add-license-dialog";
+import { LicensingDialog } from "@/components/settings/licensing-dialog";
 
 export default function LicensingPage() {
     const firestore = useFirestore();
     const { user } = useUser();
     const { toast } = useToast();
-    const [isAddLicenseOpen, setIsAddLicenseOpen] = useState(false);
+    const [isActivateLicenseOpen, setIsActivateLicenseOpen] = useState(false);
 
     const licensesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -53,7 +53,7 @@ export default function LicensingPage() {
         const licenseDocRef = doc(firestore, 'licenses', licenseId);
         const updateData: { status: 'active' | 'inactive', activationDate?: any } = { status };
         
-        if (status === 'active') {
+        if (status === 'active' && !licenses?.find(l => l.id === licenseId)?.activationDate) {
             updateData.activationDate = serverTimestamp();
         }
 
@@ -114,11 +114,11 @@ export default function LicensingPage() {
                 <div>
                     <h1 className="text-3xl font-bold font-headline">License Management</h1>
                     <p className="text-muted-foreground">
-                        Generate, assign, and manage user licenses for the ERP.
+                        Activate, assign, and manage user licenses for the ERP.
                     </p>
                 </div>
-                <Button onClick={() => setIsAddLicenseOpen(true)} disabled={!isAdmin}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add License
+                <Button onClick={() => setIsActivateLicenseOpen(true)} disabled={!isAdmin}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Activate License
                 </Button>
             </div>
             <Card>
@@ -181,7 +181,7 @@ export default function LicensingPage() {
                     </Table>
                 </CardContent>
             </Card>
-            <AddLicenseDialog isOpen={isAddLicenseOpen} setIsOpen={setIsAddLicenseOpen} />
+            <LicensingDialog isOpen={isActivateLicenseOpen} setIsOpen={setIsActivateLicenseOpen} />
         </>
     );
 }
