@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -58,7 +59,7 @@ export default function SettingsPage() {
             </fieldset>
           </form>
         </div>
-        <div className="relative flex h-full min-h-[50vh] flex-col rounded-xl bg-muted/50 p-4 lg:col-span-2">
+        <div className="relative flex h-full min-h-[50vh] flex-col rounded-xl bg-muted/50 p-4 lg:col-span-2 space-y-4">
            <Card>
                 <CardHeader>
                     <CardTitle>Appearance</CardTitle>
@@ -79,6 +80,22 @@ export default function SettingsPage() {
                 </CardContent>
                 <CardFooter className="border-t px-6 py-4">
                     <Button>Save</Button>
+                </CardFooter>
+            </Card>
+             <Card>
+                <CardHeader>
+                    <CardTitle>User Management</CardTitle>
+                    <CardDescription>
+                    Manage users, roles, and permissions.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Users className="h-12 w-12 text-muted-foreground" />
+                </CardContent>
+                <CardFooter className="border-t px-6 py-4">
+                    <Button asChild>
+                        <Link href="/settings/user-management">Manage Users</Link>
+                    </Button>
                 </CardFooter>
             </Card>
         </div>

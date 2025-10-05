@@ -1,8 +1,16 @@
+
 export type Sale = {
   name: string;
   email: string;
   amount: string;
 };
+
+export type User = {
+  id?: string;
+  username: string;
+  email: string;
+  roles: string[];
+}
 
 export type Customer = {
   id: string;

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "AppSubmodule": {
@@ -353,11 +354,11 @@
           "format": "email"
         },
         "roles": {
-            "type": "array",
-            "description": "A list of roles assigned to the user (e.g., 'admin', 'editor').",
-            "items": {
-                "type": "string"
-            }
+          "type": "array",
+          "description": "A list of roles assigned to the user (e.g., 'admin', 'editor').",
+          "items": {
+            "type": "string"
+          }
         },
         "roleIds": {
           "type": "array",
@@ -1010,6 +1011,7 @@
     ]
   },
   "firestore": {
+    "rules": "rules_version = '2';\n\nservice cloud.firestore {\n  match /databases/{database}/documents {\n\n    // Helper function to check for admin role\n    function isAdmin() {\n      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.hasAny(['admin']);\n    }\n\n    // Admins can do anything\n    match /{document=**} {\n      allow read, write: if isAdmin();\n    }\n\n    // Users can only read/write their own user document\n    match /users/{userId} {\n      allow read, update: if request.auth.uid == userId;\n      // Create is public for sign-up, but admin creation is handled by the general admin rule\n      allow create: if request.auth.uid != null;\n    }\n\n    // Allow logged-in users to manage their own data and specific collections\n    match /appSubmodules/{appSubmoduleId} {\n        allow read, write: if request.auth.uid != null;\n    }\n\n    match /transactionEntries/{transactionEntryId} {\n        allow read, write: if request.auth.uid != null;\n    }\n\n    match /formFields/{formFieldId} {\n        allow read, write: if request.auth.uid != null;\n    }\n\n    // Default deny all other access\n  }\n}",
     "structure": [
       {
         "path": "/appSubmodules/{appSubmoduleId}",
