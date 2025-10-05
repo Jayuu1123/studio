@@ -32,12 +32,14 @@ import type { License } from "@/lib/types";
 import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
 import { LicensingDialog } from "@/components/settings/licensing-dialog";
+import { AddLicenseDialog } from "@/components/settings/add-license-dialog";
 
 export default function LicensingPage() {
     const firestore = useFirestore();
     const { user } = useUser();
     const { toast } = useToast();
     const [isActivateLicenseOpen, setIsActivateLicenseOpen] = useState(false);
+    const [isAddLicenseOpen, setIsAddLicenseOpen] = useState(false);
 
     const licensesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -117,9 +119,14 @@ export default function LicensingPage() {
                         Activate, assign, and manage user licenses for the ERP.
                     </p>
                 </div>
-                <Button onClick={() => setIsActivateLicenseOpen(true)} disabled={!isAdmin}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Activate License
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsAddLicenseOpen(true)} disabled={!isAdmin}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add New License
+                    </Button>
+                    <Button onClick={() => setIsActivateLicenseOpen(true)} disabled={!isAdmin}>
+                        Activate License
+                    </Button>
+                </div>
             </div>
             <Card>
                 <CardHeader>
@@ -182,6 +189,7 @@ export default function LicensingPage() {
                 </CardContent>
             </Card>
             <LicensingDialog isOpen={isActivateLicenseOpen} setIsOpen={setIsActivateLicenseOpen} />
+            <AddLicenseDialog isOpen={isAddLicenseOpen} setIsOpen={setIsAddLicenseOpen} />
         </>
     );
 }

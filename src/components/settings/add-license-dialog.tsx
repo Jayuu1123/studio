@@ -9,14 +9,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { addDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { collection, serverTimestamp, Timestamp } from "firebase/firestore";
-import { v4 as uuidv4 } from 'uuid'; // Using uuid for unique key generation
+import { v4 as uuidv4 } from 'uuid';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import type { User } from "@/lib/types";
 import { DatePicker } from "../ui/date-picker";
@@ -46,30 +45,33 @@ export function AddLicenseDialog({ isOpen, setIsOpen }: AddLicenseDialogProps) {
       toast({ variant: "destructive", title: "Error", description: "Please select an expiry date." });
       return;
     }
+    if (!firestore) {
+      toast({ variant: "destructive", title: "Error", description: "Database not connected." });
+      return;
+    }
     setIsLoading(true);
 
     try {
-        if (firestore) {
-            const licenseKey = `SF-${uuidv4().toUpperCase()}`;
-            const selectedUser = users?.find(u => u.id === userId);
+        const licenseKey = `SF-${uuidv4().toUpperCase()}`;
+        const selectedUser = users?.find(u => u.id === userId);
 
-            const newLicense = {
-                licenseKey,
-                userId: userId && userId !== 'none' ? userId : null,
-                userEmail: selectedUser?.email || null,
-                status: 'inactive',
-                createdAt: serverTimestamp(),
-                expiryDate: Timestamp.fromDate(expiryDate),
-            };
+        const newLicense = {
+            licenseKey,
+            userId: userId && userId !== 'none' ? userId : null,
+            userEmail: selectedUser?.email || null,
+            status: 'inactive',
+            createdAt: serverTimestamp(),
+            expiryDate: Timestamp.fromDate(expiryDate),
+        };
 
-            await addDocumentNonBlocking(collection(firestore, "licenses"), newLicense);
+        await addDocumentNonBlocking(collection(firestore, "licenses"), newLicense);
 
-            toast({ title: "License Created", description: "The new license has been generated." });
-            setIsOpen(false);
-            // Reset form
-            setUserId("");
-            setExpiryDate(undefined);
-        }
+        toast({ title: "License Created", description: `Key: ${licenseKey}` });
+        setIsOpen(false);
+        // Reset form
+        setUserId("");
+        setExpiryDate(undefined);
+        
     } catch (error: any) {
       console.error("Error creating license:", error);
       toast({ variant: "destructive", title: "Error creating license", description: error.message });
@@ -84,7 +86,7 @@ export function AddLicenseDialog({ isOpen, setIsOpen }: AddLicenseDialogProps) {
         <DialogHeader>
           <DialogTitle>Add New License</DialogTitle>
           <DialogDescription>
-            Generate a new license and optionally assign it to a user.
+            Generate a new license and optionally assign it to a user. The license will be created as 'inactive'.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
