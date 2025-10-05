@@ -121,6 +121,8 @@ export default function NewTransactionEntryPage() {
 
   // Use a ref to keep the latest formData for the cleanup function
   const formDataRef = useRef(formData);
+  const manualSaveRef = useRef(false);
+
   useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
@@ -190,6 +192,10 @@ export default function NewTransactionEntryPage() {
   useEffect(() => {
     return () => {
       // This is the cleanup function that runs when the component unmounts
+      if (manualSaveRef.current) {
+        return; // Don't auto-save if a manual save just happened
+      }
+      
       const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
       
       if (isEditing && editId && hasChanged && firestore) {
@@ -227,8 +233,7 @@ export default function NewTransactionEntryPage() {
       return;
     }
     
-    // Set a flag to prevent auto-save on manual save
-    setInitialFormData(null);
+    manualSaveRef.current = true; // Set flag to prevent auto-save
 
     const finalData = JSON.parse(JSON.stringify(formData));
     finalData.status = submissionStatus;
@@ -471,3 +476,5 @@ export default function NewTransactionEntryPage() {
     </div>
   );
 }
+
+    
