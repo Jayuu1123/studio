@@ -14,7 +14,8 @@ import {
   Building,
   DollarSign,
   HeartHandshake,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Database
 } from 'lucide-react';
 import {
   Tooltip,
@@ -37,6 +38,7 @@ const navItems = [
   { href: '/crm', icon: HeartHandshake, label: 'CRM' },
   { href: '/reports', icon: LineChart, label: 'Reports' },
   { href: '/form-setting', icon: FileText, label: 'Form Setting' },
+  { href: '/database', icon: Database, label: 'Database' },
 ];
 
 export function Nav() {
