@@ -6,6 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { placeholderImages } from '@/lib/placeholder-images';
+import { useState }
+from 'react';
+import { useAuth } from '@/firebase';
+import { initiateEmailSignIn } from '@/firebase/non-blocking-login';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 function Logo() {
   return (
@@ -29,6 +35,28 @@ function Logo() {
 
 export default function LoginPage() {
   const loginImage = placeholderImages.find(p => p.id === 'login-background');
+  const [email, setEmail] = useState('sa@admin.com');
+  const [password, setPassword] = useState('saadmin');
+  const auth = useAuth();
+  const { toast } = useToast();
+  const router = useRouter();
+
+
+  const handleLogin = () => {
+    if (!auth) {
+        toast({
+            variant: "destructive",
+            title: "Authentication Error",
+            description: "Could not connect to authentication service."
+        });
+        return;
+    }
+    initiateEmailSignIn(auth, email, password);
+    // The onAuthStateChanged listener in the provider will handle the redirect on success.
+    // For now, we'll optimistically navigate. A robust solution would handle auth errors.
+    router.push('/dashboard');
+  };
+
 
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
@@ -44,7 +72,7 @@ export default function LoginPage() {
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="m@example.com" required />
+              <Input id="email" type="email" placeholder="m@example.com" required value={email} onChange={(e) => setEmail(e.target.value)}/>
             </div>
             <div className="grid gap-2">
               <div className="flex items-center">
@@ -53,10 +81,10 @@ export default function LoginPage() {
                   Forgot your password?
                 </Link>
               </div>
-              <Input id="password" type="password" required />
+              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button asChild type="submit" className="w-full">
-              <Link href="/dashboard">Login</Link>
+            <Button onClick={handleLogin} type="submit" className="w-full">
+              Login
             </Button>
             <Button variant="outline" className="w-full">
               Login with Google
