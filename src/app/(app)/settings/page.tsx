@@ -1,5 +1,6 @@
+'use client';
 import Link from "next/link"
-import { Users, KeyRound } from "lucide-react"
+import { Users, KeyRound, Fingerprint } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -114,10 +115,24 @@ export default function SettingsPage() {
                     </Button>
                 </CardFooter>
             </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Roles & Permissions</CardTitle>
+                    <CardDescription>
+                    Define user roles and control access to modules.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Fingerprint className="h-12 w-12 text-muted-foreground" />
+                </CardContent>
+                <CardFooter className="border-t px-6 py-4">
+                    <Button asChild>
+                        <Link href="/settings/roles">Manage Roles</Link>
+                    </Button>
+                </CardFooter>
+            </Card>
         </div>
       </main>
     </div>
   )
 }
-
-    

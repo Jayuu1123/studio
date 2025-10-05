@@ -13,6 +13,13 @@ export type User = {
   roles: string[];
 }
 
+export type Role = {
+    id?: string;
+    name: string;
+    description: string;
+    permissions: string[];
+}
+
 export type Customer = {
   id: string;
   name: string;
@@ -95,5 +102,3 @@ export type License = {
   // We can add a field to join with the user collection for display
   userEmail?: string; 
 };
-
-    

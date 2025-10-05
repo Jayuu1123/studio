@@ -14,8 +14,10 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-import { useFirestore } from "@/firebase";
-import { setDoc, doc } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { setDoc, doc, collection } from "firebase/firestore";
+import type { Role } from "@/lib/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 interface AddUserDialogProps {
   isOpen: boolean;
@@ -28,32 +30,36 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [role, setRole] = useState("user"); // Default role
+  const [selectedRole, setSelectedRole] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  
+  const rolesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'roles');
+  }, [firestore]);
+
+  const { data: roles } = useCollection<Role>(rolesQuery);
 
   const handleAddUser = async () => {
-    if (!email || !password || !username) {
-      toast({ variant: "destructive", title: "Error", description: "Please fill all fields." });
+    if (!email || !password || !username || !selectedRole) {
+      toast({ variant: "destructive", title: "Error", description: "Please fill all fields, including role." });
       return;
     }
 
     setIsLoading(true);
 
     try {
-        // We need a separate auth instance to create a user while being logged in as another
         const auth = getAuth();
         
-        // Create user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUserId = userCredential.user.uid;
 
-        // Create user document in Firestore
         if (firestore) {
             await setDoc(doc(firestore, "users", newUserId), {
                 id: newUserId,
                 username: username,
                 email: email,
-                roles: [role]
+                roles: [selectedRole] // Assign selected role
             });
         }
 
@@ -63,7 +69,7 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
       setEmail("");
       setPassword("");
       setUsername("");
-      setRole("user");
+      setSelectedRole("");
 
     } catch (error: any) {
       console.error("Error creating user:", error);
@@ -101,12 +107,20 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
             </Label>
             <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="col-span-3" />
           </div>
-          {/* A simple text input for role, could be a select dropdown with pre-defined roles */}
            <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="role" className="text-right">
               Role
             </Label>
-            <Input id="role" value={role} onChange={(e) => setRole(e.target.value)} className="col-span-3" placeholder="e.g., admin, user" />
+            <Select onValueChange={setSelectedRole} value={selectedRole}>
+                <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                    {roles?.map(role => (
+                        <SelectItem key={role.id} value={role.name.toLowerCase()}>{role.name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

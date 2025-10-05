@@ -17,6 +17,7 @@ import {
   HeartHandshake,
   ArrowRightLeft,
   FileText,
+  Fingerprint,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -79,15 +80,16 @@ function BreadcrumbNav() {
                 {segments.map((segment, index, arr) => {
                     const href = `/${segments.slice(0, index + 1).join('/')}`;
                     const isLast = index === arr.length - 1;
+                    const segmentName = segment.replace(/-/g, ' ');
                     return (
                         <React.Fragment key={href}>
                             <BreadcrumbSeparator />
                             <BreadcrumbItem>
                                 {isLast ? (
-                                    <BreadcrumbPage className="capitalize">{segment}</BreadcrumbPage>
+                                    <BreadcrumbPage className="capitalize">{segmentName}</BreadcrumbPage>
                                 ) : (
                                     <BreadcrumbLink asChild>
-                                        <Link href={href} className="capitalize">{segment}</Link>
+                                        <Link href={href} className="capitalize">{segmentName}</Link>
                                     </BreadcrumbLink>
                                 )}
                             </BreadcrumbItem>

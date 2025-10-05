@@ -94,7 +94,7 @@ export default function UserManagementPage() {
                   <TableCell className="font-medium">{user.username}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
-                    {user.roles?.map(role => <Badge key={role} variant="secondary" className="mr-1">{role}</Badge>)}
+                    {user.roles?.map(role => <Badge key={role} variant="secondary" className="mr-1 capitalize">{role}</Badge>)}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
