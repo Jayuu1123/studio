@@ -1,4 +1,5 @@
 
+
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Nav } from '@/components/nav';
@@ -96,6 +97,8 @@ export default function AppLayout({
   const { data: activeLicenses } = useCollection<License>(activeLicenseQuery);
 
   useEffect(() => {
+    if (isUserLoading) return; // Wait until we know who the user is
+
     if (activeLicenses) {
         const now = Timestamp.now();
         const hasValidLicense = activeLicenses.some(license => 
@@ -105,7 +108,7 @@ export default function AppLayout({
     } else {
         setIsLicensed(null); // Still loading or no licenses found
     }
-  }, [activeLicenses]);
+  }, [activeLicenses, isUserLoading]);
 
    useEffect(() => {
         if (userData?.status === 'disabled') {
@@ -192,6 +195,8 @@ export default function AppLayout({
 
     useEffect(() => {
     const fetchPermissions = async () => {
+        if (isUserLoading) return; // Don't fetch until we know who the user is
+
         if (!firestore || !userData || !userData.roles || userData.roles.length === 0) {
             setIsLoadingPermissions(false);
             setPermissions({}); // Default to no permissions
@@ -244,7 +249,7 @@ export default function AppLayout({
     };
 
     fetchPermissions();
-  }, [firestore, userData]);
+  }, [firestore, userData, isUserLoading]);
 
   if (userData && userData.status === 'disabled') {
     return <DisabledAccountWall />;
@@ -268,9 +273,9 @@ export default function AppLayout({
 
   return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
-            <Nav isLicensed={isLicensed} permissions={permissions} />
+            {!isLoadingPermissions && <Nav isLicensed={isLicensed} permissions={permissions} />}
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
-                <Header isLicensed={isLicensed} permissions={permissions} />
+                {!isLoadingPermissions && <Header isLicensed={isLicensed} permissions={permissions} />}
                 <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 relative">
                     {shouldShowWall && <LicenseWall />}
                     <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
