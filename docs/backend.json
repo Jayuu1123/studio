@@ -52,7 +52,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["A", "D", "L", "P"],
+          "enum": ["A", "D", "L", "P", "DR"],
           "description": "The status of the entry (Approved, Denied, Locked, Pending/Draft)."
         },
         "user": {
@@ -1006,6 +1006,51 @@
           "description": "Unique identifier for the ledger entry."
         }
       }
+    },
+    "License": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "License",
+      "type": "object",
+      "description": "Represents a software license for a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the license."
+        },
+        "licenseKey": {
+          "type": "string",
+          "description": "The unique license key string."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user this license is assigned to."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive", "expired"],
+          "description": "The current status of the license."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the license was created."
+        },
+        "activationDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the license was activated."
+        },
+        "expiryDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the license will expire."
+        }
+      },
+      "required": [
+        "licenseKey",
+        "status",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -1436,7 +1481,25 @@
             }
           ]
         }
+      },
+      {
+        "path": "/licenses/{licenseId}",
+        "definition": {
+          "entityName": "License",
+          "schema": {
+            "$ref": "#/backend/entities/License"
+          },
+          "description": "Collection of software licenses.",
+          "params": [
+            {
+              "name": "licenseId",
+              "description": "The unique identifier for the license."
+            }
+          ]
+        }
       }
     ]
   }
 }
+
+    

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Users } from "lucide-react"
+import { Users, KeyRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -98,8 +98,26 @@ export default function SettingsPage() {
                     </Button>
                 </CardFooter>
             </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle>License Management</CardTitle>
+                    <CardDescription>
+                    Activate, deactivate, and manage software licenses.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <KeyRound className="h-12 w-12 text-muted-foreground" />
+                </CardContent>
+                <CardFooter className="border-t px-6 py-4">
+                    <Button asChild>
+                        <Link href="/settings/licensing">Manage Licenses</Link>
+                    </Button>
+                </CardFooter>
+            </Card>
         </div>
       </main>
     </div>
   )
 }
+
+    

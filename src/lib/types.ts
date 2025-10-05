@@ -83,3 +83,17 @@ export type Order = {
     status: string;
     orderLineItemIds: string[];
 }
+
+export type License = {
+  id: string;
+  licenseKey: string;
+  userId?: string;
+  status: 'active' | 'inactive' | 'expired';
+  createdAt: Timestamp;
+  activationDate?: Timestamp;
+  expiryDate?: Timestamp;
+  // We can add a field to join with the user collection for display
+  userEmail?: string; 
+};
+
+    
