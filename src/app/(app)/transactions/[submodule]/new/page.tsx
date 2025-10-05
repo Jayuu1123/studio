@@ -110,7 +110,7 @@ export default function NewTransactionEntryPage() {
   const editId = searchParams.get('editId');
   
   const [formData, setFormData] = useState<Partial<TransactionEntry>>({
-      status: 'P',
+      status: 'DR',
       user: 'Current User', // Should be replaced with actual user
       customFields: {},
       lineItems: [{}], // Start with one empty line item
@@ -159,7 +159,7 @@ export default function NewTransactionEntryPage() {
             delete dataToLoad.id;
             delete dataToLoad.docNo;
             delete dataToLoad.docNo_sequential;
-            dataToLoad.status = 'P'; // Start as a draft/pending
+            dataToLoad.status = 'DR'; // Start as a draft/pending
             setIsEditing(true); // Duplicates should be editable
         }
         
@@ -196,8 +196,8 @@ export default function NewTransactionEntryPage() {
         console.log("Auto-saving entry as draft...");
         const docRef = doc(firestore, 'transactionEntries', editId);
         
-        // Create a copy of the data and set status to 'P' for Pending/Draft
-        const dataToSave = { ...formDataRef.current, status: 'P' };
+        // Create a copy of the data and set status to 'DR' for Draft
+        const dataToSave = { ...formDataRef.current, status: 'DR' };
         
         // Convert dates back to Timestamps for Firestore
         const convertDatesToTimestamps = (obj: any) => {
@@ -221,7 +221,7 @@ export default function NewTransactionEntryPage() {
   }, [isEditing, editId, initialFormData, firestore]);
 
 
-  const handleSaveEntry = async (submissionStatus: 'P' | 'A') => {
+  const handleSaveEntry = async (submissionStatus: 'DR' | 'A') => {
     if (!firestore || !submoduleId) {
       toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to the database.' });
       return;
@@ -359,7 +359,7 @@ export default function NewTransactionEntryPage() {
            )}
            {isEditing && (
              <>
-                <Button variant="outline" onClick={() => handleSaveEntry('P')}>Save as Draft</Button>
+                <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
                 <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
              </>
            )}
@@ -463,7 +463,7 @@ export default function NewTransactionEntryPage() {
            )}
            {isEditing && (
              <>
-                <Button variant="outline" onClick={() => handleSaveEntry('P')}>Save as Draft</Button>
+                <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
                 <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
              </>
            )}

@@ -50,12 +50,14 @@ const statusConfig: {
     label: string;
     color: 'bg-green-500' | 'bg-red-500' | 'bg-purple-500' | 'bg-gray-400';
     icon?: React.ReactNode;
+    symbol?: string;
   };
 } = {
-  A: { label: 'Approved', color: 'bg-green-500' },
-  D: { label: 'Denied', color: 'bg-red-500' },
-  P: { label: 'Draft', color: 'bg-purple-500' },
+  A: { label: 'Approved', color: 'bg-green-500', symbol: 'A' },
+  D: { label: 'Denied', color: 'bg-red-500', symbol: 'D' },
+  DR: { label: 'Draft', color: 'bg-purple-500', symbol: 'DR' },
   L: { label: 'Locked', color: 'bg-gray-400', icon: <Lock className="h-3 w-3 text-white" /> },
+  P: { label: 'Pending', color: 'bg-purple-500', symbol: 'P' }, // Kept for backward compatibility
 };
 
 
@@ -156,19 +158,21 @@ export default function TransactionSubmodulePage() {
                       <TableCell colSpan={8} className="text-center">Loading entries...</TableCell>
                   </TableRow>
               )}
-              {!isLoading && transactionEntries?.map((entry) => (
+              {!isLoading && transactionEntries?.map((entry) => {
+                const config = statusConfig[entry.status] ?? statusConfig.P; // Fallback to pending
+                return (
                 <TableRow key={entry.id}>
                   <TableCell>
                     <div className='flex justify-center'>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger>
-                            <div className={`flex items-center justify-center h-6 w-6 rounded-full ${statusConfig[entry.status]?.color ?? 'bg-gray-400'}`}>
-                               {statusConfig[entry.status]?.icon ? statusConfig[entry.status].icon : <span className="text-white font-bold text-xs">{entry.status}</span>}
+                            <div className={`flex items-center justify-center h-6 w-6 rounded-full ${config.color}`}>
+                               {config.icon ? config.icon : <span className="text-white font-bold text-xs">{config.symbol}</span>}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>{statusConfig[entry.status]?.label ?? 'Unknown'}</p>
+                            <p>{config.label}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -214,7 +218,8 @@ export default function TransactionSubmodulePage() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
                {!isLoading && (!transactionEntries || transactionEntries.length === 0) && (
                      <TableRow>
                         <TableCell colSpan={8} className="text-center">No entries found for {submoduleName}.</TableCell>

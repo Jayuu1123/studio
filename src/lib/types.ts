@@ -45,7 +45,7 @@ export type RequisitionEntry = {
 export type TransactionEntry = {
   id?: string;
   submodule: string;
-  status: 'A' | 'D' | 'L' | 'P'; // Approved, Denied, Locked, Pending
+  status: 'A' | 'D' | 'L' | 'P' | 'DR'; // Approved, Denied, Locked, Pending, Draft
   user: string;
   docNo?: string;
   docNo_sequential?: number;
