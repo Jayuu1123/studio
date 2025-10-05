@@ -39,10 +39,6 @@ export default function DashboardPage() {
     () => (firestore ? collection(firestore, 'orders') : null),
     [firestore]
   );
-  const usersQuery = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'users') : null),
-    [firestore]
-  );
   
   const recentOrdersQuery = useMemoFirebase(
     () => (firestore ? query(collection(firestore, 'orders'), orderBy('orderDate', 'desc'), limit(5)) : null),
@@ -50,13 +46,11 @@ export default function DashboardPage() {
   );
 
   const { data: orders, isLoading: isLoadingOrders } = useCollection<Order>(ordersQuery);
-  const { data: users, isLoading: isLoadingUsers } = useCollection<User>(usersQuery);
   const { data: recentOrders, isLoading: isLoadingRecent } = useCollection<Order>(recentOrdersQuery);
 
 
   const totalRevenue = orders?.reduce((sum, order) => sum + order.totalAmount, 0) || 0;
   const totalSales = orders?.length || 0;
-  const totalUsers = users?.length || 0;
 
   return (
     <>
@@ -74,22 +68,6 @@ export default function DashboardPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               Based on all completed orders
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Users
-            </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoadingUsers ? '...' : `+${totalUsers}`}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Total users in the system
             </p>
           </CardContent>
         </Card>
