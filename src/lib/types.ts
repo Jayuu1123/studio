@@ -1,3 +1,4 @@
+import { Timestamp } from "firebase/firestore";
 
 export type Sale = {
   name: string;
@@ -68,4 +69,13 @@ export type FormField = {
   type: string; // e.g., 'text', 'number', 'date'
   // validationRules?: string;
   // lookupTableId?: string;
+}
+
+export type Order = {
+    id: string;
+    customerId: string;
+    orderDate: Timestamp;
+    totalAmount: number;
+    status: string;
+    orderLineItemIds: string[];
 }
