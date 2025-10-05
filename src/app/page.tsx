@@ -9,7 +9,7 @@ import { placeholderImages } from '@/lib/placeholder-images';
 import { useState }
 from 'react';
 import { useAuth } from '@/firebase';
-import { initiateEmailSignIn } from '@/firebase/non-blocking-login';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
@@ -37,12 +37,13 @@ export default function LoginPage() {
   const loginImage = placeholderImages.find(p => p.id === 'login-background');
   const [email, setEmail] = useState('sa@admin.com');
   const [password, setPassword] = useState('saadmin');
+  const [isLoading, setIsLoading] = useState(false);
   const auth = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!auth) {
         toast({
             variant: "destructive",
@@ -51,10 +52,33 @@ export default function LoginPage() {
         });
         return;
     }
-    initiateEmailSignIn(auth, email, password);
-    // The onAuthStateChanged listener in the provider will handle the redirect on success.
-    // For now, we'll optimistically navigate. A robust solution would handle auth errors.
-    router.push('/dashboard');
+    if (!email || !password) {
+        toast({
+            variant: "destructive",
+            title: "Missing Information",
+            description: "Please enter both email and password."
+        });
+        return;
+    }
+
+    setIsLoading(true);
+
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+        // The onAuthStateChanged listener in the provider will handle the redirect on success.
+        // We will navigate from here.
+        router.push('/dashboard');
+
+    } catch (error: any) {
+        console.error("Login failed:", error);
+        toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "Invalid username or password. Please try again."
+        });
+    } finally {
+        setIsLoading(false);
+    }
   };
 
 
@@ -83,8 +107,8 @@ export default function LoginPage() {
               </div>
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button onClick={handleLogin} type="submit" className="w-full">
-              Login
+            <Button onClick={handleLogin} type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Logging in...' : 'Login'}
             </Button>
             <Button variant="outline" className="w-full">
               Login with Google
