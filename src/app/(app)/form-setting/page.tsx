@@ -5,12 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, ArrowUp, ArrowDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
-import { collection, serverTimestamp, doc } from "firebase/firestore";
+import { addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { collection, serverTimestamp, doc, query, orderBy } from "firebase/firestore";
 import type { AppSubmodule } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -26,7 +26,7 @@ export default function FormSettingPage() {
 
     const submodulesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
-        return collection(firestore, 'appSubmodules');
+        return query(collection(firestore, 'appSubmodules'), orderBy('position'));
     }, [firestore]);
 
     const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
@@ -50,10 +50,13 @@ export default function FormSettingPage() {
             return;
         }
 
+        const newPosition = (submodules?.length || 0) + 1;
+
         const newSubmodule: Omit<AppSubmodule, 'id'> = {
             name: submoduleName,
             mainModule: mainModule,
             createdAt: serverTimestamp(),
+            position: newPosition,
         };
 
         const submodulesCollection = collection(firestore, 'appSubmodules');
@@ -76,6 +79,33 @@ export default function FormSettingPage() {
         toast({
             title: "Submodule Deleted",
             description: "The submodule has been successfully deleted.",
+        });
+    }
+
+    const handleMove = (currentIndex: number, direction: 'up' | 'down') => {
+        if (!firestore || !submodules) return;
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+        if (targetIndex < 0 || targetIndex >= submodules.length) {
+            return; // Cannot move outside of bounds
+        }
+        
+        const currentSub = submodules[currentIndex];
+        const targetSub = submodules[targetIndex];
+
+        if (!currentSub.id || !targetSub.id) return;
+
+        // Swap positions
+        const currentDocRef = doc(firestore, 'appSubmodules', currentSub.id);
+        updateDocumentNonBlocking(currentDocRef, { position: targetSub.position });
+        
+        const targetDocRef = doc(firestore, 'appSubmodules', targetSub.id);
+        updateDocumentNonBlocking(targetDocRef, { position: currentSub.position });
+
+        toast({
+            title: "Submodule Moved",
+            description: `Moved '${currentSub.name}'.`,
         });
     }
 
@@ -149,19 +179,28 @@ export default function FormSettingPage() {
                 <TableRow>
                   <TableHead>Submodule Name</TableHead>
                   <TableHead>Main Module</TableHead>
+                  <TableHead>Order</TableHead>
                   <TableHead><span className="sr-only">Actions</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && (
                     <TableRow>
-                        <TableCell colSpan={3} className="text-center">Loading submodules...</TableCell>
+                        <TableCell colSpan={4} className="text-center">Loading submodules...</TableCell>
                     </TableRow>
                 )}
-                {submodules && submodules.map((sub) => (
+                {submodules && submodules.map((sub, index) => (
                   <TableRow key={sub.id}>
                     <TableCell className="font-medium">{sub.name}</TableCell>
                     <TableCell>{sub.mainModule}</TableCell>
+                    <TableCell className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleMove(index, 'up')} disabled={index === 0}>
+                            <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleMove(index, 'down')} disabled={index === submodules.length - 1}>
+                            <ArrowDown className="h-4 w-4" />
+                        </Button>
+                    </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -181,7 +220,7 @@ export default function FormSettingPage() {
                 ))}
                 {!isLoading && (!submodules || submodules.length === 0) && (
                      <TableRow>
-                        <TableCell colSpan={3} className="text-center">No submodules found.</TableCell>
+                        <TableCell colSpan={4} className="text-center">No submodules found.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
@@ -256,3 +295,5 @@ export default function FormSettingPage() {
     </div>
   );
 }
+
+  

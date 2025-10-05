@@ -60,6 +60,7 @@ export type AppSubmodule = {
   name: string;
   mainModule: string;
   createdAt: any;
+  position: number;
 }
 
 export type FormField = {
@@ -79,3 +80,5 @@ export type Order = {
     status: string;
     orderLineItemIds: string[];
 }
+
+  

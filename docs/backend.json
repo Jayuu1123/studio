@@ -23,12 +23,17 @@
           "type": "string",
           "format": "date-time",
           "description": "Timestamp when the submodule was created."
+        },
+        "position": {
+          "type": "number",
+          "description": "The display order of the submodule."
         }
       },
       "required": [
         "name",
         "mainModule",
-        "createdAt"
+        "createdAt",
+        "position"
       ]
     },
     "TransactionEntry": {
@@ -1522,4 +1527,4 @@
   }
 }
 
-    
+  
