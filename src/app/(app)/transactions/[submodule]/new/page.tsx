@@ -59,14 +59,14 @@ function DynamicFormField({ field, value, onChange, disabled }: { field: FormFie
             return (
                 <div className="grid gap-3">
                     <Label htmlFor={fieldId}>{field.name}</Label>
-                    <Input id={fieldId} type="number" value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} disabled={disabled} />
+                    <Input id={fieldId} type="number" value={value || ''} onChange={(e) => onChange(field.id!, e.target.valueAsNumber)} disabled={disabled} />
                 </div>
             );
         case 'date':
              return (
                 <div className="grid gap-3">
                     <Label htmlFor={fieldId}>{field.name}</Label>
-                    <DatePicker date={value ? new Date(value) : undefined} setDate={(d) => onChange(field.id!, d)} disabled={!disabled} />
+                    <DatePicker date={value ? new Date(value) : undefined} setDate={(d) => onChange(field.id!, d)} disabled={disabled} />
                 </div>
             );
         case 'boolean':
@@ -154,9 +154,31 @@ export default function NewTransactionEntryPage() {
 
   const { data: loadedEntry, isLoading: isLoadingEntry } = useDoc<TransactionEntry>(docToLoadRef);
 
+  const recursiveConvertToDate = (obj: any): any => {
+    if (!obj) return obj;
+    if (Array.isArray(obj)) {
+        return obj.map(item => recursiveConvertToDate(item));
+    }
+    if (typeof obj === 'object') {
+        if (obj instanceof Timestamp) {
+            return obj.toDate();
+        }
+        const newObj: { [key: string]: any } = {};
+        for (const key in obj) {
+            newObj[key] = recursiveConvertToDate(obj[key]);
+        }
+        return newObj;
+    }
+    return obj;
+  };
+  
   useEffect(() => {
     if (loadedEntry) {
-        const dataToLoad = { ...loadedEntry };
+        let dataToLoad = { ...loadedEntry };
+        
+        // Convert all Timestamps to JS Dates
+        dataToLoad = recursiveConvertToDate(dataToLoad);
+
         if (searchParams.get('duplicateId')) {
             delete dataToLoad.id;
             delete dataToLoad.docNo;
@@ -165,17 +187,6 @@ export default function NewTransactionEntryPage() {
             setEntryId(null); // It's a new entry now
             setIsEditing(true); // Duplicates should be editable
         }
-        
-        const convertTimestamps = (obj: any) => {
-            for (const key in obj) {
-                if (obj[key] instanceof Timestamp) {
-                    obj[key] = obj[key].toDate();
-                } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-                    convertTimestamps(obj[key]);
-                }
-            }
-        };
-        convertTimestamps(dataToLoad);
 
         if (!dataToLoad.lineItems || dataToLoad.lineItems.length === 0) {
             dataToLoad.lineItems = [{}];
@@ -184,50 +195,57 @@ export default function NewTransactionEntryPage() {
         setFormData(dataToLoad);
         setInitialFormData(JSON.parse(JSON.stringify(dataToLoad)));
     }
-  }, [loadedEntry, searchParams]);
+}, [loadedEntry, searchParams]);
 
 
-  const saveCurrentStateAsDraft = useCallback(async (currentData: Partial<TransactionEntry>) => {
+  const recursiveConvertToTimestamp = (obj: any): any => {
+    if (!obj) return obj;
+    if (Array.isArray(obj)) {
+        return obj.map(item => recursiveConvertToTimestamp(item));
+    }
+    if (typeof obj === 'object') {
+        const newObj: { [key: string]: any } = {};
+        for (const key in obj) {
+            const value = obj[key];
+            if (value instanceof Date) {
+                newObj[key] = Timestamp.fromDate(value);
+            } else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value)) {
+                // Check for ISO string from JSON.stringify(Date)
+                newObj[key] = Timestamp.fromDate(new Date(value));
+            } else {
+                newObj[key] = recursiveConvertToTimestamp(value);
+            }
+        }
+        return newObj;
+    }
+    return obj;
+  };
+  
+ const saveCurrentStateAsDraft = useCallback(async (currentData: Partial<TransactionEntry>) => {
     if (!firestore || !submoduleId) return null;
-    
-    manualSaveRef.current = true; // Prevent collision
-    
-    // Create a deep copy to avoid mutating the original object
-    const dataToSave = JSON.parse(JSON.stringify(currentData));
+
+    manualSaveRef.current = true;
+
+    // Create a deep copy to avoid mutating the original object and convert dates
+    const dataToSave = recursiveConvertToTimestamp(JSON.parse(JSON.stringify(currentData)));
     dataToSave.status = 'DR';
     dataToSave.submodule = submoduleName;
 
-    // Convert any Date objects back to Firestore Timestamps
-    const convertDatesToTimestamps = (obj: any) => {
-      for (const key in obj) {
-        if (obj[key] instanceof Date || (typeof obj[key] === 'string' && !isNaN(Date.parse(obj[key])))) {
-            const d = new Date(obj[key]);
-            if (!isNaN(d.getTime())) {
-                obj[key] = Timestamp.fromDate(d);
-            }
-        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-          convertDatesToTimestamps(obj[key]);
-        }
-      }
-    };
-    convertDatesToTimestamps(dataToSave);
-    
     if (dataToSave.id) {
-      // Update existing draft
-      const docRef = doc(firestore, 'transactionEntries', dataToSave.id);
-      await setDocumentNonBlocking(docRef, dataToSave, { merge: true });
-      return dataToSave.id;
+        const docRef = doc(firestore, 'transactionEntries', dataToSave.id);
+        await setDocumentNonBlocking(docRef, dataToSave, { merge: true });
+        return dataToSave.id;
     } else {
-      // Create new draft
-      dataToSave.createdAt = serverTimestamp();
-      const newDocRef = await addDocumentNonBlocking(collection(firestore, 'transactionEntries'), dataToSave);
-      return newDocRef?.id || null;
+        dataToSave.createdAt = serverTimestamp();
+        const newDocRef = await addDocumentNonBlocking(collection(firestore, 'transactionEntries'), dataToSave);
+        return newDocRef?.id || null;
     }
-  }, [firestore, submoduleId, submoduleName]);
+}, [firestore, submoduleId, submoduleName]);
 
 
   useEffect(() => {
     return () => {
+      // If a manual save just happened, don't run auto-save
       if (manualSaveRef.current) return;
       
       const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
@@ -251,24 +269,10 @@ export default function NewTransactionEntryPage() {
     
     manualSaveRef.current = true;
 
-    const finalData = JSON.parse(JSON.stringify(formData));
+    const finalData = recursiveConvertToTimestamp(JSON.parse(JSON.stringify(formData)));
     finalData.status = submissionStatus;
     finalData.submodule = submoduleName;
-
-    const convertDatesToTimestamps = (obj: any) => {
-        for (const key in obj) {
-            if (typeof obj[key] === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(obj[key])) {
-                const d = new Date(obj[key]);
-                if (!isNaN(d.getTime())) {
-                    obj[key] = Timestamp.fromDate(d);
-                }
-            } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-                convertDatesToTimestamps(obj[key]);
-            }
-        }
-    };
-    convertDatesToTimestamps(finalData);
-
+    
     const isNewEntry = !finalData.id;
 
     if (isNewEntry && submissionStatus === 'A') {
@@ -286,16 +290,17 @@ export default function NewTransactionEntryPage() {
         } catch (error) {
             console.error("Transaction failed: ", error);
             toast({ variant: 'destructive', title: 'Failed to Save', description: 'Could not generate a document number. Please try again.' });
+            manualSaveRef.current = false; // Reset on failure
             return;
         }
     }
 
     if (finalData.id) {
         const docRef = doc(firestore, 'transactionEntries', finalData.id);
-        setDocumentNonBlocking(docRef, finalData, { merge: true });
+        await setDocumentNonBlocking(docRef, finalData, { merge: true });
     } else {
         finalData.createdAt = serverTimestamp();
-        addDocumentNonBlocking(collection(firestore, 'transactionEntries'), finalData);
+        await addDocumentNonBlocking(collection(firestore, 'transactionEntries'), finalData);
     }
     
     toast({
@@ -307,25 +312,21 @@ export default function NewTransactionEntryPage() {
   };
 
   const handleFieldChange = async (updateFn: (prev: Partial<TransactionEntry>) => Partial<TransactionEntry>) => {
-    let newId = formData.id;
+    const updatedData = updateFn(formData);
+
     if (!formData.id && isEditing) {
       // It's a new entry and the user just changed something for the first time.
       // Let's create a draft right now.
-      const draftId = await saveCurrentStateAsDraft({ ...formData, ...updateFn(formData) });
+      const draftId = await saveCurrentStateAsDraft({ ...formData, ...updatedData });
       if (draftId) {
-        newId = draftId;
         // Update URL without navigation to reflect new draft ID
         router.replace(`/transactions/${submoduleSlug}/new?editId=${draftId}`, { scroll: false });
+        setFormData(prev => ({...prev, ...updatedData, id: draftId}));
+        setEntryId(draftId);
       }
+    } else {
+        setFormData(prev => ({ ...prev, ...updatedData }));
     }
-
-    setFormData(prev => {
-        const newState = updateFn(prev);
-        if (newId) {
-            newState.id = newId;
-        }
-        return newState;
-    });
   };
 
   const handleHeaderFieldChange = (fieldId: string, value: any) => {
@@ -415,7 +416,7 @@ export default function NewTransactionEntryPage() {
                     <DynamicFormField 
                         key={field.id} 
                         field={field} 
-                        value={formData.customFields?.[field.id!] || ''}
+                        value={formData.customFields?.[field.id!] ?? ''}
                         onChange={handleHeaderFieldChange}
                         disabled={!isEditing}
                     />
@@ -461,7 +462,7 @@ export default function NewTransactionEntryPage() {
                                             <Input
                                                 type={field.type === 'number' ? 'number' : 'text'}
                                                 value={item[field.id!] || ''}
-                                                onChange={(e) => handleDetailFieldChange(rowIndex, field.id!, e.target.value)}
+                                                onChange={(e) => handleDetailFieldChange(rowIndex, field.id!, field.type === 'number' ? e.target.valueAsNumber : e.target.value)}
                                                 className="w-full"
                                                 disabled={!isEditing}
                                             />
