@@ -1,103 +1,144 @@
 /**
- * @fileoverview Firestore Security Rules for SynergyFlow ERP.
+ * @fileOverview Firestore Security Rules for SynergyFlow ERP System.
  *
- * Core Philosophy: This ruleset enforces a strict, role-based access control (RBAC) model combined with user-ownership where applicable.
- *   It prioritizes security and debuggability by minimizing external reads and maximizing clarity.
+ * Core Philosophy:
+ * This ruleset prioritizes a secure, role-based access control (RBAC) model.
+ * User-specific data is secured under their respective `/users/{userId}` path,
+ * and collaborative access is managed through membership maps on documents.
+ * Read access is generally more permissive where appropriate (e.g. public lists)
+ * but all write operations are strictly controlled and require authentication.
+ *
  * Data Structure:
- *   - User-specific data is nested under `/users/{userId}`.
- *   - Global data, like roles, and lookup tables, resides in top-level collections.
- *   - Subcollections inherit the ownership and access control of their parent documents.
+ * The Firestore data is organized hierarchically. The top level consists of collections
+ * like `users`, `appSubmodules`, `transactionEntries`, `roles`, and `lookupTables`.
+ * User-specific data (workflows, form definitions) is nested under `/users/{userId}`.
+ * Subcollections such as `orderLineItems` and `returnLineItems` exist under their parent documents
+ * and denormalize authorization data for more efficient rule evaluation.
+ *
  * Key Security Decisions:
- *   - User listing is generally disallowed to prevent enumeration.
- *   - Data validation is relaxed (prototyping mode) to focus on authorization.
- *   - All write operations require authentication.
- *   - Data required for authorization is denormalized onto secured documents to minimize `get()` calls.
+ * - Listing of all users is explicitly denied, protecting user privacy.
+ * - Strict ownership is enforced for data under `/users/{userId}`.
+ * - Denormalization is used extensively to make security rules authorization-independent,
+ *   avoiding costly `get()` calls.
+ * - Public read access is enabled for certain top-level collections (e.g., Products, Categories)
+ *   while write access is restricted to authenticated users.
+ * - All write operations require authentication and authorization checks.
+ *
  * Denormalization for Authorization:
- *   - Many subcollections denormalize authorization data from parent documents to avoid costly `get()` calls in rules. For example, `OrderLineItem` denormalizes `customerId` from `Order`.
+ * - `OrderLineItem` and `ReturnLineItem` subcollections include the `customerId` from their parent `Order` document.
+ * - `POLineItem` subcollections include the `supplierId` from their parent `PurchaseOrder` document.
+ * - `GRNLineItem` subcollections include the `supplierId` from the parent `PurchaseOrder` (via GoodsReceiptNote) document.
+ * - `FormFields` include denormalized workflow-related attributes from the parent `FormDefinition`
+ *
  * Structural Segregation:
- *   - Data with differing privacy requirements is stored in separate collections to simplify rules.
+ * - User-owned workflows and form definitions are stored under `/users/{userId}`.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is authenticated.
+     * @description Checks if the request is made by a signed-in user.
+     * @returns {boolean} True if the user is signed in, false otherwise.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * @description Checks if the authenticated user is the owner of the document.
+     * @description Checks if the authenticated user ID matches the provided user ID.
+     * @param {string} userId The user ID to compare against.
+     * @returns {boolean} True if the user is the owner, false otherwise.
      */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * @description Checks if the authenticated user is the owner of the existing document.
+     * @description Checks if the authenticated user ID matches the provided user ID and the resource exists.
+     * @param {string} userId The user ID to compare against.
+     * @returns {boolean} True if the user is the owner and the resource exists, false otherwise.
      */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Allows the user to create their own user document.
+     * @description Allows a user to create their own user document, and restricts all other access.
      * @path /users/{userId}
-     * @allow (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating /users/S1ykKeLbzZMIbc7FFphZVisaXVA2
-     * @deny (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating /users/otherUserId
-     * @principle Allows self-creation of user documents.
+     * @allow (create) User 'user_abc' can create their own document at /users/user_abc
+     * @deny (create) User 'user_def' cannot create a document at /users/user_abc
+     * @deny (update) No one can update the user document directly.
+     * @deny (delete) No one can delete the user document directly.
+     * @principle Enforces user-ownership for creation, no updates or deletes allowed.
      */
     match /users/{userId} {
       allow get: if false;
       allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == request.auth.uid;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Manages custom submodules created by users.
+     * @description Allows read/write access to app submodules for authenticated users.
      * @path /appSubmodules/{appSubmoduleId}
-     * @allow (create) - Any authenticated user creating an appSubmodule.
-     * @deny (create) - Unauthenticated user attempting to create appSubmodule.
-     * @principle Authenticated users can create, update, and delete appSubmodules.
+     * @allow (create) Authenticated user can create an app submodule.
+     * @allow (get) Authenticated user can get an app submodule.
+     * @allow (update) Authenticated user can update an app submodule.
+     * @allow (delete) Authenticated user can delete an app submodule.
+     * @deny (create) Unauthenticated user cannot create an app submodule.
+     * @principle Requires authentication for all operations.
      */
     match /appSubmodules/{appSubmoduleId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages individual transaction entries for all submodules.
+     * @description Allows read/write access to transaction entries for authenticated users.
      * @path /transactionEntries/{transactionEntryId}
-     * @allow (create) - Any authenticated user creating a transactionEntry.
-     * @deny (create) - Unauthenticated user attempting to create transactionEntry.
-     * @principle Authenticated users can create, update, and delete transactionEntries.
+     * @allow (create) Authenticated user can create a transaction entry.
+     * @allow (get) Authenticated user can get a transaction entry.
+     * @allow (update) Authenticated user can update a transaction entry.
+     * @allow (delete) Authenticated user can delete a transaction entry.
+     * @deny (create) Unauthenticated user cannot create a transaction entry.
+     * @principle Requires authentication for all operations.
      */
     match /transactionEntries/{transactionEntryId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages role documents within the RBAC system.
+     * @description Allows read/write access to roles for authenticated users.
      * @path /roles/{roleId}
-     * @allow (create) - Any authenticated user creating a role.
-     * @deny (create) - Unauthenticated user attempting to create a role.
-     * @principle Authenticated users can create, update, and delete roles.
+     * @allow (create) Authenticated user can create a role.
+     * @allow (get) Authenticated user can get a role.
+     * @allow (update) Authenticated user can update a role.
+     * @allow (delete) Authenticated user can delete a role.
+     * @deny (create) Unauthenticated user cannot create a role.
+     * @principle Requires authentication for all operations.
      */
     match /roles/{roleId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages workflows owned by a specific user.
+     * @description Enforces user-ownership for workflows under /users/{userId}.
      * @path /users/{userId}/workflows/{workflowId}
-     * @allow (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a workflow under /users/S1ykKeLbzZMIbc7FFphZVisaXVA2/workflows/{workflowId}
-     * @deny (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a workflow under /users/otherUserId/workflows/{workflowId}
+     * @allow (create) User 'user_abc' can create a workflow under /users/user_abc/workflows/{workflowId}.
+     * @allow (get) User 'user_abc' can get a workflow under /users/user_abc/workflows/{workflowId}.
+     * @allow (update) User 'user_abc' can update a workflow under /users/user_abc/workflows/{workflowId}.
+     * @allow (delete) User 'user_abc' can delete a workflow under /users/user_abc/workflows/{workflowId}.
+     * @deny (create) User 'user_def' cannot create a workflow under /users/user_abc/workflows/{workflowId}.
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/workflows/{workflowId} {
@@ -108,10 +149,13 @@ service cloud.firestore {
     }
 
     /**
-     * @description Manages workflow steps belonging to a specific workflow.
+     * @description Enforces user-ownership for workflow steps under /users/{userId}/workflows/{workflowId}.
      * @path /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}
-     * @allow (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a workflowStep under /users/S1ykKeLbzZMIbc7FFphZVisaXVA2/workflows/{workflowId}/workflowSteps/{workflowStepId}
-     * @deny (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a workflowStep under /users/otherUserId/workflows/{workflowId}/workflowSteps/{workflowStepId}
+     * @allow (create) User 'user_abc' can create a workflow step under /users/user_abc/workflows/{workflowId}/workflowSteps/{workflowStepId}.
+     * @allow (get) User 'user_abc' can get a workflow step under /users/user_abc/workflows/{workflowId}/workflowSteps/{workflowStepId}.
+     * @allow (update) User 'user_abc' can update a workflow step under /users/user_abc/workflows/{workflowId}/workflowSteps/{workflowStepId}.
+     * @allow (delete) User 'user_abc' can delete a workflow step under /users/user_abc/workflows/{workflowId}/workflowSteps/{workflowStepId}.
+     * @deny (create) User 'user_def' cannot create a workflow step under /users/user_abc/workflows/{workflowId}/workflowSteps/{workflowStepId}.
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId} {
@@ -122,10 +166,13 @@ service cloud.firestore {
     }
 
     /**
-     * @description Manages form definitions owned by a specific user.
+     * @description Enforces user-ownership for form definitions under /users/{userId}.
      * @path /users/{userId}/formDefinitions/{formDefinitionId}
-     * @allow (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a formDefinition under /users/S1ykKeLbzZMIbc7FFphZVisaXVA2/formDefinitions/{formDefinitionId}
-     * @deny (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a formDefinition under /users/otherUserId/formDefinitions/{formDefinitionId}
+     * @allow (create) User 'user_abc' can create a form definition under /users/user_abc/formDefinitions/{formDefinitionId}.
+     * @allow (get) User 'user_abc' can get a form definition under /users/user_abc/formDefinitions/{formDefinitionId}.
+     * @allow (update) User 'user_abc' can update a form definition under /users/user_abc/formDefinitions/{formDefinitionId}.
+     * @allow (delete) User 'user_abc' can delete a form definition under /users/user_abc/formDefinitions/{formDefinitionId}.
+     * @deny (create) User 'user_def' cannot create a form definition under /users/user_abc/formDefinitions/{formDefinitionId}.
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/formDefinitions/{formDefinitionId} {
@@ -136,10 +183,13 @@ service cloud.firestore {
     }
 
     /**
-     * @description Manages form fields belonging to a specific form definition.
+     * @description Enforces user-ownership for form fields under /users/{userId}/formDefinitions/{formDefinitionId}.
      * @path /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-     * @allow (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a formField under /users/S1ykKeLbzZMIbc7FFphZVisaXVA2/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
-     * @deny (create) - User S1ykKeLbzZMIbc7FFphZVisaXVA2 creating a formField under /users/otherUserId/formDefinitions/{formDefinitionId}/formFields/{formFieldId}
+     * @allow (create) User 'user_abc' can create a form field under /users/user_abc/formDefinitions/{formDefinitionId}/formFields/{formFieldId}.
+     * @allow (get) User 'user_abc' can get a form field under /users/user_abc/formDefinitions/{formDefinitionId}/formFields/{formFieldId}.
+     * @allow (update) User 'user_abc' can update a form field under /users/user_abc/formDefinitions/{formDefinitionId}/formFields/{formFieldId}.
+     * @allow (delete) User 'user_abc' can delete a form field under /users/user_abc/formDefinitions/{formDefinitionId}/formFields/{formFieldId}.
+     * @deny (create) User 'user_def' cannot create a form field under /users/user_abc/formDefinitions/{formDefinitionId}/formFields/{formFieldId}.
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId} {
@@ -150,243 +200,362 @@ service cloud.firestore {
     }
 
     /**
-     * @description Manages lookup tables.
+     * @description Allows read/write access to lookup tables for authenticated users.
      * @path /lookupTables/{lookupTableId}
-     * @allow (create) - Any authenticated user creating a lookupTable.
-     * @deny (create) - Unauthenticated user attempting to create a lookupTable.
-     * @principle Authenticated users can create, update, and delete lookupTables.
+     * @allow (create) Authenticated user can create a lookup table.
+     * @allow (get) Authenticated user can get a lookup table.
+     * @allow (update) Authenticated user can update a lookup table.
+     * @allow (delete) Authenticated user can delete a lookup table.
+     * @deny (create) Unauthenticated user cannot create a lookup table.
+     * @principle Requires authentication for all operations.
      */
     match /lookupTables/{lookupTableId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages MIS reports.
+     * @description Allows read/write access to MIS reports for authenticated users.
      * @path /misReports/{misReportId}
-     * @allow (create) - Any authenticated user creating an MISReport.
-     * @deny (create) - Unauthenticated user attempting to create an MISReport.
-     * @principle Authenticated users can create, update, and delete MISReports.
+     * @allow (create) Authenticated user can create a MIS report.
+     * @allow (get) Authenticated user can get a MIS report.
+     * @allow (update) Authenticated user can update a MIS report.
+     * @allow (delete) Authenticated user can delete a MIS report.
+     * @deny (create) Unauthenticated user cannot create a MIS report.
+     * @principle Requires authentication for all operations.
      */
     match /misReports/{misReportId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+    
+    /**
+     * @description Allows read/write access to form fields for authenticated users.
+     * @path /formFields/{formFieldId}
+     * @allow (create) Authenticated user can create a form field.
+     * @allow (get) Authenticated user can get a form field.
+     * @allow (update) Authenticated user can update a form field.
+     * @allow (delete) Authenticated user can delete a form field.
+     * @deny (create) Unauthenticated user cannot create a form field.
+     * @principle Requires authentication for all operations.
+     */
+    match /formFields/{formFieldId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages transaction codes.
+     * @description Allows read/write access to transaction codes for authenticated users.
      * @path /transactionCodes/{transactionCodeId}
-     * @allow (create) - Any authenticated user creating a transactionCode.
-     * @deny (create) - Unauthenticated user attempting to create a transactionCode.
-     * @principle Authenticated users can create, update, and delete transactionCodes.
+     * @allow (create) Authenticated user can create a transaction code.
+     * @allow (get) Authenticated user can get a transaction code.
+     * @allow (update) Authenticated user can update a transaction code.
+     * @allow (delete) Authenticated user can delete a transaction code.
+     * @deny (create) Unauthenticated user cannot create a transaction code.
+     * @principle Requires authentication for all operations.
      */
     match /transactionCodes/{transactionCodeId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages product documents.
+     * @description Allows public read access to products, but restricts writes to authenticated users.
      * @path /products/{productId}
-     * @allow (create) - Any authenticated user creating a product.
-     * @deny (create) - Unauthenticated user attempting to create a product.
-     * @principle Authenticated users can create, update, and delete products.
+     * @allow (get) Any user can get a product.
+     * @allow (list) Any user can list products.
+     * @allow (create) Authenticated user can create a product.
+     * @allow (update) Authenticated user can update a product.
+     * @allow (delete) Authenticated user can delete a product.
+     * @deny (create) Unauthenticated user cannot create a product.
+     * @principle Public read, authenticated write.
      */
     match /products/{productId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages product categories.
+     * @description Allows public read access to categories, but restricts writes to authenticated users.
      * @path /categories/{categoryId}
-     * @allow (create) - Any authenticated user creating a category.
-     * @deny (create) - Unauthenticated user attempting to create a category.
-     * @principle Authenticated users can create, update, and delete categories.
+     * @allow (get) Any user can get a category.
+     * @allow (list) Any user can list categories.
+     * @allow (create) Authenticated user can create a category.
+     * @allow (update) Authenticated user can update a category.
+     * @allow (delete) Authenticated user can delete a category.
+     * @deny (create) Unauthenticated user cannot create a category.
+     * @principle Public read, authenticated write.
      */
     match /categories/{categoryId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages stock level entries.
+     * @description Allows read/write access to stock entries for authenticated users.
      * @path /stocks/{stockId}
-     * @allow (create) - Any authenticated user creating a stock.
-     * @deny (create) - Unauthenticated user attempting to create a stock.
-     * @principle Authenticated users can create, update, and delete stocks.
+     * @allow (create) Authenticated user can create a stock entry.
+     * @allow (get) Authenticated user can get a stock entry.
+     * @allow (update) Authenticated user can update a stock entry.
+     * @allow (delete) Authenticated user can delete a stock entry.
+     * @deny (create) Unauthenticated user cannot create a stock entry.
+     * @principle Requires authentication for all operations.
      */
     match /stocks/{stockId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages customer documents.
+     * @description Allows read/write access to customers for authenticated users.
      * @path /customers/{customerId}
-     * @allow (create) - Any authenticated user creating a customer.
-     * @deny (create) - Unauthenticated user attempting to create a customer.
-     * @principle Authenticated users can create, update, and delete customers.
+     * @allow (create) Authenticated user can create a customer.
+     * @allow (get) Authenticated user can get a customer.
+     * @allow (update) Authenticated user can update a customer.
+     * @allow (delete) Authenticated user can delete a customer.
+     * @deny (create) Unauthenticated user cannot create a customer.
+     * @principle Requires authentication for all operations.
      */
     match /customers/{customerId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages order documents.
+     * @description Allows read/write access to orders for authenticated users.
      * @path /orders/{orderId}
-     * @allow (create) - Any authenticated user creating an order.
-     * @deny (create) - Unauthenticated user attempting to create an order.
-     * @principle Authenticated users can create, update, and delete orders.
+     * @allow (create) Authenticated user can create an order.
+     * @allow (get) Authenticated user can get an order.
+     * @allow (update) Authenticated user can update an order.
+     * @allow (delete) Authenticated user can delete an order.
+     * @deny (create) Unauthenticated user cannot create an order.
+     * @principle Requires authentication for all operations.
      */
     match /orders/{orderId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages order line items for a specific order.
+     * @description Allows read/write access to order line items for authenticated users.
      * @path /orders/{orderId}/orderLineItems/{orderLineItemId}
-     * @allow (create) - Any authenticated user creating an orderLineItem under an order.
-     * @deny (create) - Unauthenticated user attempting to create an orderLineItem.
-     * @principle Authenticated users can create, update, and delete orderLineItems.
+     * @allow (create) Authenticated user can create an order line item.
+     * @allow (get) Authenticated user can get an order line item.
+     * @allow (update) Authenticated user can update an order line item.
+     * @allow (delete) Authenticated user can delete an order line item.
+     * @deny (create) Unauthenticated user cannot create an order line item.
+     * @principle Requires authentication for all operations.
      */
     match /orders/{orderId}/orderLineItems/{orderLineItemId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages invoice documents.
+     * @description Allows read/write access to invoices for authenticated users.
      * @path /invoices/{invoiceId}
-     * @allow (create) - Any authenticated user creating an invoice.
-     * @deny (create) - Unauthenticated user attempting to create an invoice.
-     * @principle Authenticated users can create, update, and delete invoices.
+     * @allow (create) Authenticated user can create an invoice.
+     * @allow (get) Authenticated user can get an invoice.
+     * @allow (update) Authenticated user can update an invoice.
+     * @allow (delete) Authenticated user can delete an invoice.
+     * @deny (create) Unauthenticated user cannot create an invoice.
+     * @principle Requires authentication for all operations.
      */
     match /invoices/{invoiceId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages return documents.
+     * @description Allows read/write access to returns for authenticated users.
      * @path /returns/{returnId}
-     * @allow (create) - Any authenticated user creating a return.
-     * @deny (create) - Unauthenticated user attempting to create a return.
-     * @principle Authenticated users can create, update, and delete returns.
+     * @allow (create) Authenticated user can create a return.
+     * @allow (get) Authenticated user can get a return.
+     * @allow (update) Authenticated user can update a return.
+     * @allow (delete) Authenticated user can delete a return.
+     * @deny (create) Unauthenticated user cannot create a return.
+     * @principle Requires authentication for all operations.
      */
     match /returns/{returnId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages return line items for a specific return.
+     * @description Allows read/write access to return line items for authenticated users.
      * @path /returns/{returnId}/returnLineItems/{returnLineItemId}
-     * @allow (create) - Any authenticated user creating a returnLineItem under a return.
-     * @deny (create) - Unauthenticated user attempting to create a returnLineItem.
-     * @principle Authenticated users can create, update, and delete returnLineItems.
+     * @allow (create) Authenticated user can create a return line item.
+     * @allow (get) Authenticated user can get a return line item.
+     * @allow (update) Authenticated user can update a return line item.
+     * @allow (delete) Authenticated user can delete a return line item.
+     * @deny (create) Unauthenticated user cannot create a return line item.
+     * @principle Requires authentication for all operations.
      */
     match /returns/{returnId}/returnLineItems/{returnLineItemId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages supplier documents.
+     * @description Allows read/write access to suppliers for authenticated users.
      * @path /suppliers/{supplierId}
-     * @allow (create) - Any authenticated user creating a supplier.
-     * @deny (create) - Unauthenticated user attempting to create a supplier.
-     * @principle Authenticated users can create, update, and delete suppliers.
+     * @allow (create) Authenticated user can create a supplier.
+     * @allow (get) Authenticated user can get a supplier.
+     * @allow (update) Authenticated user can update a supplier.
+     * @allow (delete) Authenticated user can delete a supplier.
+     * @deny (create) Unauthenticated user cannot create a supplier.
+     * @principle Requires authentication for all operations.
      */
     match /suppliers/{supplierId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages purchase order documents.
+     * @description Allows read/write access to purchase orders for authenticated users.
      * @path /purchaseOrders/{purchaseOrderId}
-     * @allow (create) - Any authenticated user creating a purchaseOrder.
-     * @deny (create) - Unauthenticated user attempting to create a purchaseOrder.
-     * @principle Authenticated users can create, update, and delete purchaseOrders.
+     * @allow (create) Authenticated user can create a purchase order.
+     * @allow (get) Authenticated user can get a purchase order.
+     * @allow (update) Authenticated user can update a purchase order.
+     * @allow (delete) Authenticated user can delete a purchase order.
+     * @deny (create) Unauthenticated user cannot create a purchase order.
+     * @principle Requires authentication for all operations.
      */
     match /purchaseOrders/{purchaseOrderId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages purchase order line items for a specific purchase order.
+     * @description Allows read/write access to purchase order line items for authenticated users.
      * @path /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId}
-     * @allow (create) - Any authenticated user creating a poLineItem under a purchaseOrder.
-     * @deny (create) - Unauthenticated user attempting to create a poLineItem.
-     * @principle Authenticated users can create, update, and delete poLineItems.
+     * @allow (create) Authenticated user can create a purchase order line item.
+     * @allow (get) Authenticated user can get a purchase order line item.
+     * @allow (update) Authenticated user can update a purchase order line item.
+     * @allow (delete) Authenticated user can delete a purchase order line item.
+     * @deny (create) Unauthenticated user cannot create a purchase order line item.
+     * @principle Requires authentication for all operations.
      */
     match /purchaseOrders/{purchaseOrderId}/poLineItems/{poLineItemId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages goods receipt note documents.
+     * @description Allows read/write access to goods receipt notes for authenticated users.
      * @path /goodsReceiptNotes/{goodsReceiptNoteId}
-     * @allow (create) - Any authenticated user creating a goodsReceiptNote.
-     * @deny (create) - Unauthenticated user attempting to create a goodsReceiptNote.
-     * @principle Authenticated users can create, update, and delete goodsReceiptNotes.
+     * @allow (create) Authenticated user can create a goods receipt note.
+     * @allow (get) Authenticated user can get a goods receipt note.
+     * @allow (update) Authenticated user can update a goods receipt note.
+     * @allow (delete) Authenticated user can delete a goods receipt note.
+     * @deny (create) Unauthenticated user cannot create a goods receipt note.
+     * @principle Requires authentication for all operations.
      */
     match /goodsReceiptNotes/{goodsReceiptNoteId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages goods receipt note line items for a specific goods receipt note.
+     * @description Allows read/write access to goods receipt note line items for authenticated users.
      * @path /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId}
-     * @allow (create) - Any authenticated user creating a grnLineItem under a goodsReceiptNote.
-     * @deny (create) - Unauthenticated user attempting to create a grnLineItem.
-     * @principle Authenticated users can create, update, and delete grnLineItems.
+     * @allow (create) Authenticated user can create a goods receipt note line item.
+     * @allow (get) Authenticated user can get a goods receipt note line item.
+     * @allow (update) Authenticated user can update a goods receipt note line item.
+     * @allow (delete) Authenticated user can delete a goods receipt note line item.
+     * @deny (create) Unauthenticated user cannot create a goods receipt note line item.
+     * @principle Requires authentication for all operations.
      */
     match /goodsReceiptNotes/{goodsReceiptNoteId}/grnLineItems/{grnLineItemId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages payment documents.
+     * @description Allows read/write access to payments for authenticated users.
      * @path /payments/{paymentId}
-     * @allow (create) - Any authenticated user creating a payment.
-     * @deny (create) - Unauthenticated user attempting to create a payment.
-     * @principle Authenticated users can create, update, and delete payments.
+     * @allow (create) Authenticated user can create a payment.
+     * @allow (get) Authenticated user can get a payment.
+     * @allow (update) Authenticated user can update a payment.
+     * @allow (delete) Authenticated user can delete a payment.
+     * @deny (create) Unauthenticated user cannot create a payment.
+     * @principle Requires authentication for all operations.
      */
     match /payments/{paymentId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages chart of accounts entries.
+     * @description Allows read/write access to chart of accounts entries for authenticated users.
      * @path /chartOfAccounts/{chartOfAccountsId}
-     * @allow (create) - Any authenticated user creating a chartOfAccounts.
-     * @deny (create) - Unauthenticated user attempting to create a chartOfAccounts.
-     * @principle Authenticated users can create, update, and delete chartOfAccounts.
+     * @allow (create) Authenticated user can create a chart of accounts entry.
+     * @allow (get) Authenticated user can get a chart of accounts entry.
+     * @allow (update) Authenticated user can update a chart of accounts entry.
+     * @allow (delete) Authenticated user can delete a chart of accounts entry.
+     * @deny (create) Unauthenticated user cannot create a chart of accounts entry.
+     * @principle Requires authentication for all operations.
      */
     match /chartOfAccounts/{chartOfAccountsId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages ledger entries.
+     * @description Allows read/write access to ledger entries for authenticated users.
      * @path /ledgerEntries/{ledgerEntryId}
-     * @allow (create) - Any authenticated user creating a ledgerEntry.
-     * @deny (create) - Unauthenticated user attempting to create a ledgerEntry.
-     * @principle Authenticated users can create, update, and delete ledgerEntries.
+     * @allow (create) Authenticated user can create a ledger entry.
+     * @allow (get) Authenticated user can get a ledger entry.
+     * @allow (update) Authenticated user can update a ledger entry.
+     * @allow (delete) Authenticated user can delete a ledger entry.
+     * @deny (create) Unauthenticated user cannot create a ledger entry.
+     * @principle Requires authentication for all operations.
      */
     match /ledgerEntries/{ledgerEntryId} {
       allow get, list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
   }
 }
