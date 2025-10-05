@@ -31,7 +31,8 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { TransactionCodeSearch } from './transaction-code-search';
 import { UserNav } from './user-nav';
-import { cn } from '@/lib/utils';
+import { cn, slugify } from '@/lib/utils';
+import type { PermissionSet } from '@/lib/types';
 
 const mobileNavItems = [
     { href: '/dashboard', icon: Home, label: 'Dashboard' },
@@ -102,9 +103,14 @@ function BreadcrumbNav() {
 }
 
 
-export function Header({ isLicensed }: { isLicensed: boolean | null }) {
+export function Header({ isLicensed, permissions }: { isLicensed: boolean | null, permissions: PermissionSet }) {
   const pathname = usePathname();
   
+  const hasAccess = (label: string) => {
+    if (permissions.all) return true;
+    return permissions[slugify(label)];
+  }
+
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <Sheet>
@@ -135,6 +141,8 @@ export function Header({ isLicensed }: { isLicensed: boolean | null }) {
               <span className="sr-only">SynergyFlow ERP</span>
             </Link>
             {mobileNavItems.map((item) => {
+                if (!hasAccess(item.label)) return null;
+
                 const isDisabled = isLicensed === false && !item.href.startsWith('/settings');
                  return (
                     <Link

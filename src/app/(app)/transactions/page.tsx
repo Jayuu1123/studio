@@ -1,39 +1,13 @@
 'use client';
 
 import React from 'react';
-import {
-  MoreHorizontal,
-  PlusCircle,
-  Search,
-  RefreshCw,
-  Lock,
-  HeartHandshake,
-  ShoppingCart,
-  Package,
-  Briefcase,
-  LineChart,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy } from 'firebase/firestore';
-import type { AppSubmodule } from '@/lib/types';
+import type { AppSubmodule, PermissionSet } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { slugify } from '@/lib/utils';
 
 // Helper function to group submodules by their mainModule
 const groupSubmodules = (submodules: AppSubmodule[]) => {
@@ -47,7 +21,11 @@ const groupSubmodules = (submodules: AppSubmodule[]) => {
   }, {} as { [key: string]: AppSubmodule[] });
 };
 
-export default function TransactionsPage() {
+interface TransactionsPageProps {
+  permissions: PermissionSet;
+}
+
+export default function TransactionsPage({ permissions }: TransactionsPageProps) {
   const firestore = useFirestore();
 
   const submodulesQuery = useMemoFirebase(() => {
@@ -58,8 +36,26 @@ export default function TransactionsPage() {
   const { data: dynamicSubmodules, isLoading } =
     useCollection<AppSubmodule>(submodulesQuery);
 
-  const groupedSubmodules = dynamicSubmodules
-    ? groupSubmodules(dynamicSubmodules)
+  const filteredSubmodules = useMemo(() => {
+    if (!dynamicSubmodules || !permissions) return [];
+    if (permissions.all) return dynamicSubmodules;
+    
+    return dynamicSubmodules.filter(sub => {
+        const mainModuleSlug = slugify(sub.mainModule);
+        const submoduleSlug = slugify(sub.name);
+        const mainModulePerms = permissions[mainModuleSlug];
+        
+        if (typeof mainModulePerms === 'object') {
+            const subPerms = mainModulePerms[submoduleSlug];
+            // @ts-ignore
+            return subPerms?.read;
+        }
+        return false;
+    });
+  }, [dynamicSubmodules, permissions]);
+
+  const groupedSubmodules = filteredSubmodules
+    ? groupSubmodules(filteredSubmodules)
     : {};
   const mainModuleOrder = [
     'Transactions',
@@ -98,18 +94,14 @@ export default function TransactionsPage() {
           </div>
         ))}
       {!isLoading &&
-        (!dynamicSubmodules || dynamicSubmodules.length === 0) && (
+        (!filteredSubmodules || filteredSubmodules.length === 0) && (
           <Card>
             <CardHeader>
-              <CardTitle>No Custom Submodules Found</CardTitle>
+              <CardTitle>No Accessible Submodules Found</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                You can create new submodules in the{' '}
-                <Link href="/form-setting" className="text-primary underline">
-                  Form Setting
-                </Link>{' '}
-                page.
+                You do not have permission to view any submodules. Please contact an administrator.
               </p>
             </CardContent>
           </Card>
@@ -117,5 +109,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-
-  

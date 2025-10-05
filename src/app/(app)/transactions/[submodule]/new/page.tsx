@@ -34,14 +34,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { unslugify } from '@/lib/utils';
+import { unslugify, slugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp, runTransaction } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
-import type { TransactionEntry, FormField, AppSubmodule } from '@/lib/types';
+import type { TransactionEntry, FormField, AppSubmodule, PermissionSet } from '@/lib/types';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 
 
@@ -98,7 +98,7 @@ function DynamicFormField({ field, value, onChange, disabled }: { field: FormFie
 }
 
 
-export default function NewTransactionEntryPage() {
+export default function NewTransactionEntryPage({ permissions }: { permissions: PermissionSet }) {
   const params = useParams();
   const submoduleSlug = params.submodule as string;
   const submoduleName = unslugify(submoduleSlug);
@@ -153,6 +153,16 @@ export default function NewTransactionEntryPage() {
   }, [firestore, entryId]);
 
   const { data: loadedEntry, isLoading: isLoadingEntry } = useDoc<TransactionEntry>(docToLoadRef);
+  
+  const canWrite = useMemo(() => {
+      if (!permissions || !submodule) return false;
+      if (permissions.all) return true;
+      const mainModuleSlug = slugify(submodule.mainModule);
+      const subSlug = slugify(submodule.name);
+      // @ts-ignore
+      return permissions[mainModuleSlug]?.[subSlug]?.write;
+  }, [permissions, submodule]);
+
 
   const recursiveConvertToDate = (obj: any): any => {
     if (!obj) return obj;
@@ -375,6 +385,7 @@ export default function NewTransactionEntryPage() {
     ? `Duplicate ${submoduleName} Entry`
     : `New ${submoduleName} Entry`;
 
+  const effectiveIsEditing = isEditing && canWrite;
 
   return (
     <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
@@ -386,17 +397,17 @@ export default function NewTransactionEntryPage() {
           </Link>
         </Button>
         <h1 className="flex-1 shrink-0 whitespace-nowrap text-xl font-semibold font-headline tracking-tight sm:grow-0">
-          {isEditing ? pageTitle.replace('View', 'Edit') : pageTitle}
+          {effectiveIsEditing ? pageTitle.replace('View', 'Edit') : pageTitle}
         </h1>
 
         <div className="hidden items-center gap-2 md:ml-auto md:flex">
-           {searchParams.get('editId') && !isEditing && (
+           {searchParams.get('editId') && !effectiveIsEditing && canWrite && (
              <Button onClick={() => setIsEditing(true)}>
                <Edit className="h-4 w-4 mr-2" />
                Edit Entry
              </Button>
            )}
-           {isEditing && (
+           {effectiveIsEditing && (
              <>
                 <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
                 <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
@@ -420,7 +431,7 @@ export default function NewTransactionEntryPage() {
                         field={field} 
                         value={formData.customFields?.[field.id!] ?? ''}
                         onChange={handleHeaderFieldChange}
-                        disabled={!isEditing}
+                        disabled={!effectiveIsEditing}
                     />
                 ))}
                 {!isLoadingFields && headerFields?.length === 0 && (
@@ -434,7 +445,7 @@ export default function NewTransactionEntryPage() {
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <CardTitle>Indent Detail</CardTitle>
-                        {isEditing && (
+                        {effectiveIsEditing && (
                            <Button size="sm" onClick={addLineItem}>
                                 <PlusCircle className="h-4 w-4 mr-2" />
                                 Add Row
@@ -449,7 +460,7 @@ export default function NewTransactionEntryPage() {
                                 {detailFields.map(field => (
                                     <TableHead key={field.id}>{field.name}</TableHead>
                                 ))}
-                                {isEditing && (
+                                {effectiveIsEditing && (
                                 <TableHead className="w-[50px]">
                                     <span className="sr-only">Actions</span>
                                 </TableHead>
@@ -466,17 +477,17 @@ export default function NewTransactionEntryPage() {
                                                 value={item[field.id!] || ''}
                                                 onChange={(e) => handleDetailFieldChange(rowIndex, field.id!, field.type === 'number' ? e.target.valueAsNumber : e.target.value)}
                                                 className="w-full"
-                                                disabled={!isEditing}
+                                                disabled={!effectiveIsEditing}
                                             />
                                         </TableCell>
                                     ))}
-                                    {isEditing && (
+                                    {effectiveIsEditing && (
                                     <TableCell>
                                         <Button
                                             variant="ghost"
                                             size="icon"
                                             onClick={() => removeLineItem(rowIndex)}
-                                            disabled={!isEditing}
+                                            disabled={!effectiveIsEditing}
                                         >
                                             <Trash2 className="h-4 w-4 text-red-500" />
                                         </Button>
@@ -494,13 +505,13 @@ export default function NewTransactionEntryPage() {
         </div>
       </div>
       <div className="flex items-center justify-center gap-2 md:hidden">
-         {searchParams.get('editId') && !isEditing && (
+         {searchParams.get('editId') && !effectiveIsEditing && canWrite && (
              <Button onClick={() => setIsEditing(true)}>
                <Edit className="h-4 w-4 mr-2" />
                Edit Entry
              </Button>
            )}
-           {isEditing && (
+           {effectiveIsEditing && (
              <>
                 <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
                 <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>

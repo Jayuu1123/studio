@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   MoreHorizontal,
   PlusCircle,
@@ -35,8 +35,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { unslugify } from '@/lib/utils';
-import type { TransactionEntry } from '@/lib/types';
+import { unslugify, slugify } from '@/lib/utils';
+import type { TransactionEntry, PermissionSet, AppSubmodule } from '@/lib/types';
 import Link from 'next/link';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
@@ -60,8 +60,11 @@ const statusConfig: {
   P: { label: 'Pending', color: 'bg-purple-500', symbol: 'P' }, // Kept for backward compatibility
 };
 
+interface TransactionSubmodulePageProps {
+  permissions: PermissionSet;
+}
 
-export default function TransactionSubmodulePage() {
+export default function TransactionSubmodulePage({ permissions }: TransactionSubmodulePageProps) {
   const params = useParams();
   const submodule = params.submodule as string;
   const submoduleName = unslugify(submodule);
@@ -75,6 +78,33 @@ export default function TransactionSubmodulePage() {
   }, [firestore, submoduleName]);
 
   const { data: transactionEntries, isLoading } = useCollection<TransactionEntry>(entriesQuery);
+
+  const submoduleQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appSubmodules'), where('name', '==', submoduleName));
+  }, [firestore, submoduleName]);
+  
+  const { data: submodules } = useCollection<AppSubmodule>(submoduleQuery);
+  const currentSubmodule = submodules?.[0];
+
+  const canDelete = useMemo(() => {
+      if (!permissions || !currentSubmodule) return false;
+      if (permissions.all) return true;
+      const mainModuleSlug = slugify(currentSubmodule.mainModule);
+      const subSlug = slugify(currentSubmodule.name);
+      // @ts-ignore
+      return permissions[mainModuleSlug]?.[subSlug]?.delete;
+  }, [permissions, currentSubmodule]);
+  
+  const canWrite = useMemo(() => {
+      if (!permissions || !currentSubmodule) return false;
+      if (permissions.all) return true;
+      const mainModuleSlug = slugify(currentSubmodule.mainModule);
+      const subSlug = slugify(currentSubmodule.name);
+      // @ts-ignore
+      return permissions[mainModuleSlug]?.[subSlug]?.write;
+  }, [permissions, currentSubmodule]);
+
 
   const handleDeleteEntry = (entryId: string) => {
     if (!firestore) return;
@@ -117,11 +147,13 @@ export default function TransactionSubmodulePage() {
                     <DropdownMenuItem>Option 2</DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
-            <Button asChild>
-              <Link href={`/transactions/${submodule}/new`}>
-                <PlusCircle className="h-4 w-4 mr-2" />Add New
-              </Link>
-            </Button>
+            {canWrite && (
+              <Button asChild>
+                <Link href={`/transactions/${submodule}/new`}>
+                  <PlusCircle className="h-4 w-4 mr-2" />Add New
+                </Link>
+              </Button>
+            )}
         </div>
       </div>
       <Card>
@@ -207,13 +239,15 @@ export default function TransactionSubmodulePage() {
                           <Edit className='mr-2 h-4 w-4' />
                           View / Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDuplicateEntry(entry)}>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-red-500"
-                          onClick={() => entry.id && handleDeleteEntry(entry.id)}
-                        >
-                          Delete
-                        </DropdownMenuItem>
+                        {canWrite && <DropdownMenuItem onClick={() => handleDuplicateEntry(entry)}>Duplicate</DropdownMenuItem>}
+                        {canDelete && 
+                          <DropdownMenuItem
+                            className="text-red-500"
+                            onClick={() => entry.id && handleDeleteEntry(entry.id)}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        }
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

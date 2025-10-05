@@ -22,7 +22,8 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+import { cn, slugify } from '@/lib/utils';
+import type { PermissionSet } from '@/lib/types';
 
 
 const navItems = [
@@ -39,8 +40,13 @@ const navItems = [
   { href: '/form-setting', icon: FileText, label: 'Form Setting' },
 ];
 
-export function Nav({ isLicensed }: { isLicensed: boolean | null }) {
+export function Nav({ isLicensed, permissions }: { isLicensed: boolean | null, permissions: PermissionSet }) {
   const pathname = usePathname();
+  
+  const hasAccess = (label: string) => {
+    if (permissions.all) return true;
+    return permissions[slugify(label)];
+  }
 
   return (
     <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
@@ -65,6 +71,8 @@ export function Nav({ isLicensed }: { isLicensed: boolean | null }) {
         </Link>
         <TooltipProvider>
           {navItems.map((item) => {
+            if (!hasAccess(item.label)) return null;
+
             const isDisabled = isLicensed === false;
             return (
                 <Tooltip key={item.href}>

@@ -15,11 +15,19 @@ export type User = {
   sessionId?: string;
 }
 
+export type PermissionSet = {
+  [key: string]: boolean | {
+    read?: boolean;
+    write?: boolean;
+    delete?: boolean;
+  }
+}
+
 export type Role = {
     id?: string;
     name: string;
     description: string;
-    permissions: string[];
+    permissions: PermissionSet;
 }
 
 export type Customer = {
@@ -104,5 +112,3 @@ export type License = {
   // We can add a field to join with the user collection for display
   userEmail?: string; 
 };
-
-    

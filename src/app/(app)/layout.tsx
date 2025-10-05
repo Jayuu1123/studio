@@ -1,18 +1,19 @@
 
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Nav } from '@/components/nav';
 import { Header } from '@/components/header';
 import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { initiateAnonymousSignIn } from '@/firebase/non-blocking-login';
-import { doc, setDoc, getDoc, collection, query, where, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, Timestamp, getDocs } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import type { License, User } from '@/lib/types';
+import type { License, User, Role, PermissionSet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ShieldAlert, UserX } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { slugify } from '@/lib/utils';
 
 function LicenseWall() {
     return (
@@ -74,6 +75,8 @@ export default function AppLayout({
   const router = useRouter();
   const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
+  const [permissions, setPermissions] = useState<PermissionSet>({});
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
 
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -141,6 +144,18 @@ export default function AppLayout({
         const adminPassword = 'saadmin';
         
         try {
+            // Ensure admin role exists
+            const adminRoleRef = doc(firestore, 'roles', 'admin');
+            const adminRoleSnap = await getDoc(adminRoleRef);
+            if (!adminRoleSnap.exists()) {
+                await setDoc(adminRoleRef, {
+                    name: 'Admin',
+                    description: 'Super administrator with all permissions.',
+                    permissions: { all: true } // Special flag for all access
+                });
+            }
+
+
             const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
             const adminUID = userCredential.user.uid;
 
@@ -175,26 +190,94 @@ export default function AppLayout({
     }
   }, [auth, user, isUserLoading]);
 
+    useEffect(() => {
+    const fetchPermissions = async () => {
+        if (!firestore || !userData || !userData.roles || userData.roles.length === 0) {
+            setIsLoadingPermissions(false);
+            setPermissions({}); // Default to no permissions
+            return;
+        }
+
+        setIsLoadingPermissions(true);
+        const roles = userData.roles;
+        let combinedPermissions: PermissionSet = {};
+
+        try {
+            const roleQuery = query(collection(firestore, 'roles'), where('name', 'in', roles));
+            const roleSnapshots = await getDocs(roleQuery);
+            
+            roleSnapshots.forEach(doc => {
+                const roleData = doc.data() as Role;
+                if(roleData.permissions) {
+                    // Special case for admin with all access
+                    if (roleData.permissions.all === true) {
+                        combinedPermissions = { all: true };
+                        return; // Exit early
+                    }
+
+                    // Merge permissions
+                    for (const key in roleData.permissions) {
+                        const existingPerm = combinedPermissions[key];
+                        const newPerm = roleData.permissions[key];
+
+                        if (typeof existingPerm === 'object' && typeof newPerm === 'object') {
+                             combinedPermissions[key] = { ...existingPerm, ...newPerm };
+                        } else {
+                             combinedPermissions[key] = newPerm;
+                        }
+                    }
+                }
+            });
+             // Exit loop if admin role found
+            if (combinedPermissions.all) {
+                 setPermissions(combinedPermissions);
+                 setIsLoadingPermissions(false);
+                 return;
+            }
+
+        } catch (error) {
+            console.error("Error fetching permissions:", error);
+        } finally {
+            setPermissions(combinedPermissions);
+            setIsLoadingPermissions(false);
+        }
+    };
+
+    fetchPermissions();
+  }, [firestore, userData]);
+
   if (userData && userData.status === 'disabled') {
     return <DisabledAccountWall />;
   }
 
-  const shouldShowWall = isLicensed === false && !pathname.startsWith('/settings') && pathname !== '/';
+  const hasAccess = (module: string) => {
+    if (permissions.all) return true;
+    return permissions[slugify(module)];
+  };
+
+  const isSettingsPath = pathname.startsWith('/settings');
+  const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
+  
+  const childrenWithPermissions = React.Children.map(children, child => {
+    if (React.isValidElement(child)) {
+      // @ts-ignore
+      return React.cloneElement(child, { permissions, hasAccess });
+    }
+    return child;
+  });
 
   return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
-            <Nav isLicensed={isLicensed} />
+            <Nav isLicensed={isLicensed} permissions={permissions} />
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
-                <Header isLicensed={isLicensed} />
+                <Header isLicensed={isLicensed} permissions={permissions} />
                 <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 relative">
                     {shouldShowWall && <LicenseWall />}
                     <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
-                         {children}
+                         {isLoadingPermissions ? <div>Loading permissions...</div> : childrenWithPermissions}
                     </div>
                 </main>
             </div>
         </div>
   );
 }
-
-    
