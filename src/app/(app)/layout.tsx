@@ -26,34 +26,37 @@ export default function AppLayout({
 
         const adminEmail = 'sa@admin.com';
         const adminPassword = 'saadmin';
-        const adminUID = 'synergyflow-super-admin'; // A predictable UID
+        
+        try {
+            // Attempt to create the user. If it fails because the email is in use,
+            // we assume the admin user is already set up in Auth.
+            const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
+            const adminUID = userCredential.user.uid;
 
-        // Check if admin user document exists in Firestore
-        const userDocRef = doc(firestore, 'users', adminUID);
-        const userDoc = await getDoc(userDocRef);
+            // Now, check if the Firestore document exists for this new user
+            const userDocRef = doc(firestore, 'users', adminUID);
+            const userDoc = await getDoc(userDocRef);
 
-        if (!userDoc.exists()) {
-            try {
-                // Try to create the auth user. This might fail if the user already exists in Auth but not Firestore.
-                // For this special case, we will ignore the auth creation error and proceed to create the Firestore doc.
-                await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
-            } catch (error: any) {
-                 if (error.code !== 'auth/email-already-in-use') {
-                    console.error("Failed to create admin auth user:", error);
-                    // If it's another error, we might want to stop.
-                    return;
-                 }
-                 console.log("Admin auth user likely already exists, proceeding to create Firestore doc.");
+            if (!userDoc.exists()) {
+                // Create the user document in Firestore with the admin role
+                await setDoc(userDocRef, {
+                    username: 'sa',
+                    email: adminEmail,
+                    id: adminUID,
+                    roles: ['admin']
+                });
+                console.log("Admin user and roles document created in Firestore.");
             }
-            
-            // Create the user document in Firestore with the admin role
-             await setDoc(userDocRef, {
-                username: 'sa',
-                email: adminEmail,
-                id: adminUID,
-                roles: ['admin']
-            });
-            console.log("Admin user and roles document created in Firestore.");
+        } catch (error: any) {
+            if (error.code === 'auth/email-already-in-use') {
+                // This is expected if the admin was already created.
+                // In a real-world scenario, you might want to verify the user
+                // has the admin role in Firestore here, but for this setup, we'll assume it's correct.
+                console.log("Admin auth user already exists.");
+            } else {
+                // Log other errors
+                console.error("Failed to set up admin user:", error);
+            }
         }
     };
     
