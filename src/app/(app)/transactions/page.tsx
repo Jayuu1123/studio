@@ -5,11 +5,16 @@ import Link from 'next/link';
 import { slugify } from "@/lib/utils";
 import {
   FileText,
+  ShoppingCart,
+  Package,
+  Briefcase,
+  HeartHandshake,
+  LineChart,
 } from 'lucide-react';
 import type { AppSubmodule } from "@/lib/types";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useState, ReactNode } from "react";
 
 // Helper function to group submodules by their mainModule
 const groupSubmodules = (submodules: AppSubmodule[]) => {
@@ -25,6 +30,34 @@ const groupSubmodules = (submodules: AppSubmodule[]) => {
 
 interface SubmoduleCardProps {
     submodule: AppSubmodule;
+}
+
+const coreModules: { name: string; icon: ReactNode; href: string }[] = [
+    { name: "Sales", icon: <ShoppingCart className="h-4 w-4" />, href: "/sales"},
+    { name: "Inventory", icon: <Package className="h-4 w-4" />, href: "/inventory"},
+    { name: "Purchase", icon: <Briefcase className="h-4 w-4" />, href: "/purchase"},
+    { name: "CRM", icon: <HeartHandshake className="h-4 w-4" />, href: "/crm"},
+    { name: "Reports", icon: <LineChart className="h-4 w-4" />, href: "/reports"},
+];
+
+function CoreModuleCard({ name, icon, href }: { name: string; icon: ReactNode; href: string }) {
+    return (
+        <Card className="hover:shadow-lg transition-shadow w-full">
+            <Link href={href} className="block h-full">
+                <CardContent className="p-4 flex flex-col justify-between h-full">
+                    <div className="flex items-center gap-3 mb-2">
+                         <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-sm font-semibold">
+                            {icon}
+                        </span>
+                        <CardTitle className="text-base font-medium">{name}</CardTitle>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                        Access the {name} module.
+                    </div>
+                </CardContent>
+            </Link>
+        </Card>
+    );
 }
 
 function SubmoduleCard({ submodule }: SubmoduleCardProps) {
@@ -98,7 +131,7 @@ export default function TransactionsPage() {
     const { data: dynamicSubmodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
     
     const groupedSubmodules = dynamicSubmodules ? groupSubmodules(dynamicSubmodules) : {};
-    const mainModuleOrder = ['CRM', 'Production', 'Purchase', 'Store Management', 'Dispatch', 'Quality Assurance', 'User Management'];
+    const mainModuleOrder = ['Transactions', 'Sales', 'Inventory', 'Purchase', 'CRM', 'Reports', 'User Management'];
 
     const sortedMainModules = Object.keys(groupedSubmodules).sort((a, b) => {
         const indexA = mainModuleOrder.indexOf(a);
@@ -111,7 +144,19 @@ export default function TransactionsPage() {
 
     return (
     <div className="space-y-6">
-        {isLoading && <p>Loading modules...</p>}
+        <div>
+            <h2 className="text-xl font-semibold mb-3 text-muted-foreground">Core Modules</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {coreModules.map(module => (
+                    <CoreModuleCard key={module.name} {...module} />
+                ))}
+            </div>
+        </div>
+
+        {isLoading && <p>Loading custom modules...</p>}
+        
+        {!isLoading && sortedMainModules.length > 0 && <hr/>}
+
         {!isLoading && sortedMainModules.map((mainModule) => (
             <div key={mainModule}>
                 <h2 className="text-xl font-semibold mb-3 text-muted-foreground">{mainModule}</h2>
@@ -122,14 +167,14 @@ export default function TransactionsPage() {
                 </div>
             </div>
         ))}
-        {!isLoading && sortedMainModules.length === 0 && (
+        {!isLoading && (!dynamicSubmodules || dynamicSubmodules.length === 0) && (
              <Card>
                 <CardHeader>
-                    <CardTitle>No Modules Found</CardTitle>
+                    <CardTitle>No Custom Submodules Found</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <p className="text-muted-foreground">
-                       You can create new modules and submodules in the <Link href="/form-setting" className="text-primary underline">Form Setting</Link> page.
+                       You can create new submodules in the <Link href="/form-setting" className="text-primary underline">Form Setting</Link> page.
                     </p>
                 </CardContent>
             </Card>
