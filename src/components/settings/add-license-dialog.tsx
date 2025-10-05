@@ -55,7 +55,7 @@ export function AddLicenseDialog({ isOpen, setIsOpen }: AddLicenseDialogProps) {
 
             const newLicense = {
                 licenseKey,
-                userId: userId || null,
+                userId: userId && userId !== 'none' ? userId : null,
                 userEmail: selectedUser?.email || null,
                 status: 'inactive',
                 createdAt: serverTimestamp(),
@@ -97,7 +97,7 @@ export function AddLicenseDialog({ isOpen, setIsOpen }: AddLicenseDialogProps) {
                     <SelectValue placeholder="Select a user (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
+                    <SelectItem value="none">Unassigned</SelectItem>
                     {users?.map(user => (
                         <SelectItem key={user.id} value={user.id!}>{user.email}</SelectItem>
                     ))}
@@ -123,5 +123,3 @@ export function AddLicenseDialog({ isOpen, setIsOpen }: AddLicenseDialogProps) {
     </Dialog>
   );
 }
-
-    
