@@ -40,7 +40,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "TransactionEntry",
       "type": "object",
-      "description": "Represents a single entry within a transaction submodule.",
+      "description": "Represents a single entry within a transaction submodule, with dynamic custom fields.",
       "properties": {
         "id": {
           "type": "string",
@@ -67,22 +67,15 @@
           "type": "number",
           "description": "The sequential part of the document number for sorting and generation."
         },
-        "category": {
-          "type": "string",
-          "description": "The category of the transaction."
+        "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the entry was created."
         },
-        "date": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The date of the document or transaction."
-        },
-        "department": {
-          "type": "string",
-          "description": "The department associated with this entry."
-        },
-        "productionItem": {
-          "type": "string",
-          "description": "The production item related to this entry."
+        "customFields": {
+          "type": "object",
+          "description": "A map of custom field data, where keys are formField IDs.",
+          "additionalProperties": true
         }
       },
       "required": [
@@ -90,7 +83,7 @@
         "status",
         "user",
         "docNo",
-        "date",
+        "createdAt",
         "docNo_sequential"
       ]
     },
@@ -142,7 +135,7 @@
         },
         "formDefinitionId": {
           "type": "string",
-          "description": "Reference to FormDefinition. (Relationship: FormDefinition 1:N FormField)"
+          "description": "Reference to the AppSubmodule acting as the form definition."
         },
         "name": {
           "type": "string",
@@ -150,15 +143,7 @@
         },
         "type": {
           "type": "string",
-          "description": "Data type of the field (e.g., text, number, date)."
-        },
-        "validationRules": {
-          "type": "string",
-          "description": "Rules for validating the field's input."
-        },
-        "lookupTableId": {
-          "type": "string",
-          "description": "Reference to LookupTable. (Relationship: LookupTable 1:N FormField) - optional"
+          "description": "Data type of the field (e.g., text, number, date, boolean, select)."
         }
       },
       "required": [
@@ -1051,6 +1036,26 @@
         }
       },
       {
+        "path": "/appSubmodules/{appSubmoduleId}/formFields/{formFieldId}",
+        "definition": {
+          "entityName": "FormField",
+          "schema": {
+            "$ref": "#/backend/entities/FormField"
+          },
+          "description": "Collection of form fields belonging to a specific submodule.",
+          "params": [
+            {
+              "name": "appSubmoduleId",
+              "description": "The unique identifier for the app submodule."
+            },
+            {
+              "name": "formFieldId",
+              "description": "The unique identifier for the form field."
+            }
+          ]
+        }
+      },
+      {
         "path": "/transactionEntries/{transactionEntryId}",
         "definition": {
           "entityName": "TransactionEntry",
@@ -1083,94 +1088,6 @@
         }
       },
       {
-        "path": "/users/{userId}/workflows/{workflowId}",
-        "definition": {
-          "entityName": "Workflow",
-          "schema": {
-            "$ref": "#/backend/entities/Workflow"
-          },
-          "description": "Collection of workflows owned by a specific user. Path-based ownership.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user."
-            },
-            {
-              "name": "workflowId",
-              "description": "The unique identifier for the workflow."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/workflows/{workflowId}/workflowSteps/{workflowStepId}",
-        "definition": {
-          "entityName": "WorkflowStep",
-          "schema": {
-            "$ref": "#/backend/entities/WorkflowStep"
-          },
-          "description": "Collection of workflow steps belonging to a specific workflow. Path-based ownership.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user."
-            },
-            {
-              "name": "workflowId",
-              "description": "The unique identifier for the workflow."
-            },
-            {
-              "name": "workflowStepId",
-              "description": "The unique identifier for the workflow step."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/formDefinitions/{formDefinitionId}",
-        "definition": {
-          "entityName": "FormDefinition",
-          "schema": {
-            "$ref": "#/backend/entities/FormDefinition"
-          },
-          "description": "Collection of form definitions owned by a specific user. Path-based ownership.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user."
-            },
-            {
-              "name": "formDefinitionId",
-              "description": "The unique identifier for the form definition."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/formDefinitions/{formDefinitionId}/formFields/{formFieldId}",
-        "definition": {
-          "entityName": "FormField",
-          "schema": {
-            "$ref": "#/backend/entities/FormField"
-          },
-          "description": "Collection of form fields belonging to a specific form definition. Includes denormalized 'workflowId' and potentially other workflow-related attributes from the parent FormDefinition for authorization independence.  Path-based ownership.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user."
-            },
-            {
-              "name": "formDefinitionId",
-              "description": "The unique identifier for the form definition."
-            },
-            {
-              "name": "formFieldId",
-              "description": "The unique identifier for the form field."
-            }
-          ]
-        }
-      },
-      {
         "path": "/lookupTables/{lookupTableId}",
         "definition": {
           "entityName": "LookupTable",
@@ -1193,7 +1110,7 @@
           "schema": {
             "$ref": "#/backend/entities/MISReport"
           },
-          "description": "Collection of MIS reports. Includes denormalized 'members' map for authorization independence.",
+          "description": "Collection of MIS reports.",
           "params": [
             {
               "name": "misReportId",
@@ -1202,22 +1119,6 @@
           ]
         }
       },
-      {
-      "path": "/formFields/{formFieldId}",
-      "definition": {
-        "entityName": "FormField",
-        "schema": {
-          "$ref": "#/backend/entities/FormField"
-        },
-        "description": "Global collection for all form fields.",
-        "params": [
-          {
-            "name": "formFieldId",
-            "description": "The unique identifier for the form field."
-          }
-        ]
-      }
-    },
       {
         "path": "/transactionCodes/{transactionCodeId}",
         "definition": {
@@ -1321,7 +1222,7 @@
           "schema": {
             "$ref": "#/backend/entities/OrderLineItem"
           },
-          "description": "Subcollection of order line items for a specific order. Includes denormalized 'customerId' from the parent Order for authorization independence.",
+          "description": "Subcollection of order line items for a specific order.",
           "params": [
             {
               "name": "orderId",
@@ -1373,7 +1274,7 @@
           "schema": {
             "$ref": "#/backend/entities/ReturnLineItem"
           },
-          "description": "Subcollection of return line items for a specific return. Includes denormalized 'customerId' from the parent Order (via Return) for authorization independence.",
+          "description": "Subcollection of return line items for a specific return.",
           "params": [
             {
               "name": "returnId",
@@ -1425,7 +1326,7 @@
           "schema": {
             "$ref": "#/backend/entities/POLineItem"
           },
-          "description": "Subcollection of purchase order line items for a specific purchase order.  Includes denormalized 'supplierId' from the parent PurchaseOrder for authorization independence.",
+          "description": "Subcollection of purchase order line items for a specific purchase order.",
           "params": [
             {
               "name": "purchaseOrderId",
@@ -1461,7 +1362,7 @@
           "schema": {
             "$ref": "#/backend/entities/GRNLineItem"
           },
-          "description": "Subcollection of goods receipt note line items for a specific goods receipt note. Includes denormalized 'supplierId' from the parent PurchaseOrder (via GoodsReceiptNote) for authorization independence.",
+          "description": "Subcollection of goods receipt note line items for a specific goods receipt note.",
           "params": [
             {
               "name": "goodsReceiptNoteId",
@@ -1522,9 +1423,6 @@
           ]
         }
       }
-    ],
-    "reasoning": "The Firestore structure is designed to support the SynergyFlow ERP system, emphasizing security, scalability, and debuggability. It adheres to Authorization Independence (CRITICAL) by denormalizing authorization data to avoid `get()` calls in security rules, Clarity of Intent (Debuggability) through explicit naming and structure, DBAC (No Custom Claims) using database-stored roles, QAPs (Rules are not Filters) via structural segregation, and Invariants by enforcing data integrity. The structure facilitates simple, robust, and easily debuggable security rules.  User-owned data is stored under `/users/{userId}`. Collaborative data uses Membership Maps. Global roles utilize dedicated collections (e.g., `/roles_admin/{uid}`).\n\nDenormalization is extensively used to ensure authorization independence.  For instance, if access to `FormFields` depends on `Workflow` attributes, these attributes will be copied to `FormFields`. This allows security rules to validate access to `FormFields` without needing to `get()` the `Workflow` document.\n\nStructural segregation ensures that collections contain documents with homogeneous security needs.  For example, public vs. private reports would be stored in separate collections to avoid complex rule logic.\n\nThe structure allows for secure list operations by avoiding the need to filter based on data in the rules.  Access is determined by the document's location and/or the presence of the user's ID in a membership map."
+    ]
   }
 }
-
-  

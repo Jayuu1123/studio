@@ -34,22 +34,76 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { unslugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
-import type { TransactionEntry } from '@/lib/types';
+import type { TransactionEntry, FormField, AppSubmodule } from '@/lib/types';
 import React, { useEffect, useState } from 'react';
+
+
+function DynamicFormField({ field, value, onChange }: { field: FormField, value: any, onChange: (fieldId: string, value: any) => void }) {
+    const fieldId = field.name.toLowerCase().replace(/\s/g, '-');
+    switch (field.type) {
+        case 'text':
+            return (
+                <div className="grid gap-3">
+                    <Label htmlFor={fieldId}>{field.name}</Label>
+                    <Input id={fieldId} value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} />
+                </div>
+            );
+        case 'number':
+            return (
+                <div className="grid gap-3">
+                    <Label htmlFor={fieldId}>{field.name}</Label>
+                    <Input id={fieldId} type="number" value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} />
+                </div>
+            );
+        case 'date':
+             return (
+                <div className="grid gap-3">
+                    <Label htmlFor={fieldId}>{field.name}</Label>
+                    <DatePicker date={value ? new Date(value) : undefined} setDate={(d) => onChange(field.id!, d)} />
+                </div>
+            );
+        case 'boolean':
+             return (
+                <div className="flex items-center gap-2 pt-4">
+                    <Checkbox id={fieldId} checked={value || false} onCheckedChange={(c) => onChange(field.id!, c)} />
+                    <Label htmlFor={fieldId}>{field.name}</Label>
+                </div>
+            );
+        case 'select':
+            return (
+                <div className="grid gap-3">
+                    <Label htmlFor={fieldId}>{field.name}</Label>
+                    <Select value={value} onValueChange={(v) => onChange(field.id!, v)}>
+                        <SelectTrigger id={fieldId}>
+                            <SelectValue placeholder={`Select ${field.name}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                           {/* In a real app, options would come from the field definition */}
+                           <SelectItem value="option-1">Option 1</SelectItem>
+                           <SelectItem value="option-2">Option 2</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            );
+        default:
+            return null;
+    }
+}
 
 
 export default function NewTransactionEntryPage() {
   const params = useParams();
-  const submodule = params.submodule as string;
-  const submoduleName = unslugify(submodule);
+  const submoduleSlug = params.submodule as string;
+  const submoduleName = unslugify(submoduleSlug);
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
@@ -58,12 +112,26 @@ export default function NewTransactionEntryPage() {
   const editId = searchParams.get('editId');
   
   const [formData, setFormData] = useState<Partial<TransactionEntry>>({
-      category: 'Requisition',
-      department: 'Store',
-      productionItem: 'N/A',
-      user: 'Current User',
       status: 'P',
+      user: 'Current User', // Should be replaced with actual user
+      customFields: {},
   });
+
+  const submoduleQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appSubmodules'), where('name', '==', submoduleName), limit(1));
+  }, [firestore, submoduleName]);
+  
+  const { data: submodules } = useCollection<AppSubmodule>(submoduleQuery);
+  const submodule = submodules?.[0];
+  const submoduleId = submodule?.id;
+
+  const formFieldsQuery = useMemoFirebase(() => {
+    if(!firestore || !submoduleId) return null;
+    return collection(firestore, 'appSubmodules', submoduleId, 'formFields');
+  }, [firestore, submoduleId]);
+
+  const { data: formFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
   
   const docToLoadRef = useMemoFirebase(() => {
     if (!firestore || (!duplicateId && !editId)) return null;
@@ -77,14 +145,22 @@ export default function NewTransactionEntryPage() {
     if (loadedEntry) {
         const dataToLoad = { ...loadedEntry };
         if (duplicateId) {
-            // If duplicating, clear out fields that should be new
             delete dataToLoad.id;
             delete dataToLoad.docNo;
             delete dataToLoad.docNo_sequential;
-            dataToLoad.status = 'P'; // Reset status
+            dataToLoad.status = 'P';
         }
         if (dataToLoad.date && dataToLoad.date instanceof Timestamp) {
             dataToLoad.date = dataToLoad.date.toDate();
+        }
+        // Handle custom fields, which might be Timestamps
+        if (dataToLoad.customFields) {
+            Object.keys(dataToLoad.customFields).forEach(key => {
+                const value = dataToLoad.customFields[key];
+                if (value instanceof Timestamp) {
+                    dataToLoad.customFields[key] = value.toDate();
+                }
+            });
         }
         setFormData(dataToLoad);
     }
@@ -98,21 +174,26 @@ export default function NewTransactionEntryPage() {
     }
     
     const entriesCollection = collection(firestore, 'transactionEntries');
-    
+    const finalData = { ...formData };
+
+    // Convert all date objects in customFields to Firestore Timestamps
+    if (finalData.customFields) {
+        Object.keys(finalData.customFields).forEach(key => {
+            const value = finalData.customFields[key];
+            if (value instanceof Date) {
+                finalData.customFields[key] = Timestamp.fromDate(value);
+            }
+        });
+    }
+
     if (editId) {
-        // Update existing document
         const docRef = doc(firestore, 'transactionEntries', editId);
-        const updatedData = {
-            ...formData,
-            date: formData.date ? Timestamp.fromDate(new Date(formData.date)) : serverTimestamp(),
-        };
-        setDocumentNonBlocking(docRef, updatedData, { merge: true });
+        setDocumentNonBlocking(docRef, finalData, { merge: true });
         toast({
             title: 'Entry Updated',
-            description: `Entry ${formData.docNo} has been updated.`,
+            description: `Entry ${finalData.docNo} has been updated.`,
         });
     } else {
-        // Create new document
         const q = query(
           entriesCollection,
           where('submodule', '==', submoduleName),
@@ -127,12 +208,12 @@ export default function NewTransactionEntryPage() {
           nextDocNo = (latestEntry.docNo_sequential || 0) + 1;
         }
 
-        const newEntry: Omit<TransactionEntry, 'id'> = {
-            ...(formData as Omit<TransactionEntry, 'id'>),
+        const newEntry: Partial<TransactionEntry> = {
+            ...finalData,
             submodule: submoduleName,
             docNo: `tic/25-26/${nextDocNo}`,
             docNo_sequential: nextDocNo,
-            date: formData.date ? Timestamp.fromDate(new Date(formData.date)) : serverTimestamp(),
+            createdAt: serverTimestamp(),
         };
         
         addDocumentNonBlocking(entriesCollection, newEntry);
@@ -142,22 +223,28 @@ export default function NewTransactionEntryPage() {
             description: `New entry for ${submoduleName} has been saved with Doc No: ${newEntry.docNo}`,
         });
     }
-    router.push(`/transactions/${submodule}`);
+    router.push(`/transactions/${submoduleSlug}`);
   };
 
-  const handleInputChange = (field: keyof TransactionEntry, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const handleCustomFieldChange = (fieldId: string, value: any) => {
+    setFormData(prev => ({ 
+        ...prev, 
+        customFields: {
+            ...prev.customFields,
+            [fieldId]: value
+        }
+    }));
   };
 
-  if (isLoadingEntry) {
-    return <div>Loading entry...</div>
+  if (isLoadingEntry || isLoadingFields) {
+    return <div>Loading...</div>
   }
 
   return (
     <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
       <div className="flex items-center gap-4">
         <Button variant="outline" size="icon" className="h-7 w-7" asChild>
-          <Link href={`/transactions/${submodule}`}>
+          <Link href={`/transactions/${submoduleSlug}`}>
             <ChevronLeft className="h-4 w-4" />
             <span className="sr-only">Back</span>
           </Link>
@@ -167,7 +254,7 @@ export default function NewTransactionEntryPage() {
         </h1>
 
         <div className="hidden items-center gap-2 md:ml-auto md:flex">
-          <Button variant="outline">
+           <Button variant="outline">
             <Copy className="h-4 w-4 mr-2" />
             Duplicate
           </Button>
@@ -184,116 +271,27 @@ export default function NewTransactionEntryPage() {
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="grid auto-rows-max items-start gap-4 lg:col-span-2">
-          {/* Principle Section */}
+          
+          {/* Dynamic Form Section */}
           <Card>
             <CardHeader>
-              <CardTitle>Principle</CardTitle>
+              <CardTitle>{submoduleName} Details</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-6 md:grid-cols-2">
-                <div className="grid gap-3">
-                  <Label htmlFor="category">Category</Label>
-                  <Select value={formData.category} onValueChange={(v) => handleInputChange('category', v)}>
-                    <SelectTrigger id="category">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="requisition">Requisition</SelectItem>
-                      <SelectItem value="order">Order</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-3">
-                    <Label htmlFor="doc-date">Doc Date</Label>
-                    <DatePicker date={formData.date ? new Date(formData.date) : undefined} setDate={(d) => handleInputChange('date', d)} />
-                </div>
-                <div className="grid gap-3">
-                  <Label htmlFor="department">Department</Label>
-                   <Select value={formData.department} onValueChange={(v) => handleInputChange('department', v)}>
-                    <SelectTrigger id="department">
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="paint">Paint</SelectItem>
-                      <SelectItem value="store">Store</SelectItem>
-                       <SelectItem value="mechanical">Mechanical</SelectItem>
-                       <SelectItem value="valve">Valve</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-3">
-                  <Label htmlFor="production-item">Production Item</Label>
-                  <Select value={formData.productionItem} onValueChange={(v) => handleInputChange('productionItem', v)}>
-                    <SelectTrigger id="production-item">
-                      <SelectValue placeholder="Select item" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">N/A</SelectItem>
-                      <SelectItem value="item-1">Item 1</SelectItem>
-                      <SelectItem value="item-2">Item 2</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                 <div className="grid gap-3">
-                  <Label htmlFor="requisition-by">Requisition By</Label>
-                  <Input id="requisition-by" value={formData.user} onChange={(e) => handleInputChange('user', e.target.value)} />
-                </div>
-                <div className="grid gap-3">
-                  <Label htmlFor="job-no">Job No</Label>
-                  <Input id="job-no" defaultValue="NA" />
-                </div>
-                <div className="grid gap-3 md:col-span-2">
-                  <Label htmlFor="project-name">Project Name</Label>
-                  <Input id="project-name" defaultValue="NA" />
-                </div>
+                {isLoadingFields && <p>Loading form...</p>}
+                {formFields && formFields.map(field => (
+                    <DynamicFormField 
+                        key={field.id} 
+                        field={field} 
+                        value={formData.customFields?.[field.id!] || ''}
+                        onChange={handleCustomFieldChange}
+                    />
+                ))}
+                {!isLoadingFields && formFields?.length === 0 && (
+                    <p className="text-muted-foreground md:col-span-2">No fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/design`} className="text-primary underline">Design the form now</Link>.</p>
+                )}
               </div>
-            </CardContent>
-          </Card>
-          
-          {/* Item Details Section */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Item Details</CardTitle>
-              <div className="flex items-center gap-2">
-                 <Button size="sm" variant="outline">
-                    <MoreVertical className="h-3.5 w-3.5" />
-                 </Button>
-                 <Button size="sm" variant="outline">
-                    <PlusCircle className="h-3.5 w-3.5" />
-                 </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]"></TableHead>
-                    <TableHead>Sr No</TableHead>
-                    <TableHead>Item Name</TableHead>
-                    <TableHead>UOM</TableHead>
-                    <TableHead>Grade</TableHead>
-                    <TableHead>Required Date</TableHead>
-                    <TableHead>Required Quantity</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell><MoreVertical className="h-4 w-4 text-muted-foreground" /></TableCell>
-                    <TableCell>1</TableCell>
-                    <TableCell className="font-medium">INDICATION PLATE</TableCell>
-                    <TableCell>NOS</TableCell>
-                    <TableCell>
-                        <Input defaultValue="" className="w-24" />
-                    </TableCell>
-                    <TableCell>
-                      <DatePicker />
-                    </TableCell>
-                    <TableCell>
-                      <Input type="number" defaultValue="300" className="w-24" />
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
             </CardContent>
           </Card>
         </div>
@@ -307,15 +305,12 @@ export default function NewTransactionEntryPage() {
             <CardContent>
               <div className="grid gap-6">
                 <div className="grid gap-3">
-                    <Label>URN</Label>
-                    <p className="text-sm font-medium text-muted-foreground">{formData.id || 'SRQ02001005000309'}</p>
-                </div>
-                <div className="grid gap-3">
                     <Label>Doc No</Label>
-                    <p className="text-sm font-medium text-muted-foreground">{formData.docNo || 'TIC/25-26/XXX'}</p>
+                    <p className="text-sm font-medium text-muted-foreground">{formData.docNo || 'Will be generated on save'}</p>
                 </div>
                 <div className="grid gap-3">
-                    <Label htmlFor="status">Status</Label>                    <Select value={formData.status} onValueChange={(v) => handleInputChange('status', v)} disabled={!editId}>
+                    <Label htmlFor="status">Status</Label>                    
+                    <Select value={formData.status} onValueChange={(v) => setFormData(p => ({...p, status: v as any}))} disabled={!editId}>
                         <SelectTrigger id="status" aria-label="Select status">
                         <SelectValue placeholder="Select status" />
                         </SelectTrigger>

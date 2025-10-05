@@ -49,10 +49,13 @@ export type TransactionEntry = {
   user: string;
   docNo?: string;
   docNo_sequential?: number;
-  category: string;
-  date: any;
-  department: string;
-  productionItem: string;
+  createdAt?: any;
+  customFields?: { [key: string]: any }; // To store dynamic field data
+  // Deprecated fields, kept for old data compatibility
+  category?: string;
+  date?: any;
+  department?: string;
+  productionItem?: string;
 }
 
 export type AppSubmodule = {
@@ -67,9 +70,7 @@ export type FormField = {
   id?: string;
   formDefinitionId: string; // Corresponds to submoduleId
   name: string;
-  type: string; // e.g., 'text', 'number', 'date'
-  // validationRules?: string;
-  // lookupTableId?: string;
+  type: string; // e.g., 'text', 'number', 'date', 'boolean', 'select'
 }
 
 export type Order = {
@@ -80,5 +81,3 @@ export type Order = {
     status: string;
     orderLineItemIds: string[];
 }
-
-  

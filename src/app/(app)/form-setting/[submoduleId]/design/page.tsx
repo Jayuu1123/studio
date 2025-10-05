@@ -33,12 +33,10 @@ export default function DesignFormPage() {
 
     const { data: submodule, isLoading: isLoadingSubmodule } = useDoc<AppSubmodule>(submoduleRef);
 
-    //TODO: This needs to point to a subcollection of formFields for the submodule
     const fieldsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
-        // This should be a subcollection in a real app, e.g., collection(firestore, 'appSubmodules', submoduleId, 'formFields')
-        // For simplicity, we'll filter from a root collection for now.
-        return collection(firestore, 'formFields');
+        if (!firestore || !submoduleId) return null;
+        // Correctly point to the subcollection of formFields for the specific submodule.
+        return collection(firestore, 'appSubmodules', submoduleId, 'formFields');
     }, [firestore, submoduleId]);
 
     const { data: fields, isLoading: isLoadingFields } = useCollection<FormField>(fieldsQuery);
@@ -62,13 +60,15 @@ export default function DesignFormPage() {
             return;
         }
 
+        // The formDefinitionId is implicit in the subcollection path,
+        // but we can keep it for data portability if needed.
         const newField: Omit<FormField, 'id'> = {
             formDefinitionId: submoduleId,
             name: fieldName,
             type: fieldType
         };
 
-        const fieldsCollection = collection(firestore, 'formFields');
+        const fieldsCollection = collection(firestore, 'appSubmodules', submoduleId, 'formFields');
         addDocumentNonBlocking(fieldsCollection, newField);
 
         toast({
@@ -82,8 +82,8 @@ export default function DesignFormPage() {
     };
 
     const handleDeleteField = (id: string) => {
-        if (!firestore) return;
-        const docRef = doc(firestore, 'formFields', id);
+        if (!firestore || !submoduleId) return;
+        const docRef = doc(firestore, 'appSubmodules', submoduleId, 'formFields', id);
         deleteDocumentNonBlocking(docRef);
         toast({
             title: "Field Deleted",
@@ -129,8 +129,8 @@ export default function DesignFormPage() {
                                     <SelectItem value="text">Text</SelectItem>
                                     <SelectItem value="number">Number</SelectItem>
                                     <SelectItem value="date">Date</SelectItem>
-                                    <SelectItem value="boolean">Checkbox / Boolean</SelectItem>
-                                    <SelectItem value="select">Dropdown (Select)</SelectItem>
+                                    <SelectItem value="boolean">Checkbox</SelectItem>
+                                    <SelectItem value="select">Dropdown</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -160,7 +160,7 @@ export default function DesignFormPage() {
                                         <TableCell colSpan={3} className="text-center">Loading fields...</TableCell>
                                     </TableRow>
                                 )}
-                                {fields?.filter(f => f.formDefinitionId === submoduleId).map((field) => (
+                                {fields?.map((field) => (
                                     <TableRow key={field.id}>
                                         <TableCell className="font-medium">{field.name}</TableCell>
                                         <TableCell>{field.type}</TableCell>
@@ -181,7 +181,7 @@ export default function DesignFormPage() {
                                         </TableCell>
                                     </TableRow>
                                 ))}
-                                {!isLoadingFields && fields?.filter(f => f.formDefinitionId === submoduleId).length === 0 && (
+                                {!isLoadingFields && fields?.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={3} className="text-center">No fields defined yet.</TableCell>
                                     </TableRow>
