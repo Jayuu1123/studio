@@ -1,6 +1,6 @@
 'use client';
 import { useState } from "react";
-import { MoreHorizontal, PlusCircle, Trash2, UserX } from "lucide-react";
+import { MoreHorizontal, PlusCircle, UserX, UserCheck } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -69,6 +69,21 @@ export default function UserManagementPage() {
             toast({ variant: "destructive", title: "Error", description: "Failed to disable user." });
         }
     }
+    
+    const handleEnableUser = async (userId: string) => {
+        if (!firestore) {
+            toast({ variant: "destructive", title: "Error", description: "Firestore not available." });
+            return;
+        }
+        const userDocRef = doc(firestore, 'users', userId);
+        try {
+            await updateDoc(userDocRef, { status: 'active' });
+            toast({ title: "User Enabled", description: "The user has been re-enabled and can now log in." });
+        } catch (error) {
+            toast({ variant: "destructive", title: "Error", description: "Failed to enable user." });
+        }
+    }
+
 
   return (
     <>
@@ -124,10 +139,17 @@ export default function UserManagementPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => handleOpenDialog(user)} disabled={user.status === 'disabled'}>Edit</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => user.id && handleDisableUser(user.id)} className="text-red-500" disabled={user.status === 'disabled'}>
-                          <UserX className="mr-2 h-4 w-4" />
-                          Disable
-                        </DropdownMenuItem>
+                         {user.status === 'active' ? (
+                          <DropdownMenuItem onClick={() => user.id && handleDisableUser(user.id)} className="text-red-500">
+                            <UserX className="mr-2 h-4 w-4" />
+                            Disable
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => user.id && handleEnableUser(user.id)} className="text-green-600">
+                            <UserCheck className="mr-2 h-4 w-4" />
+                            Enable
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
