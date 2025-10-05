@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { ChevronLeft, FileText, Settings, ShieldCheck, FileUp } from "lucide-react";
 import { useState } from "react";
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc } from "firebase/firestore";
 import type { AppSubmodule } from "@/lib/types";
 import { useParams } from "next/navigation";
 import Link from "next/link";
