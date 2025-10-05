@@ -1,3 +1,4 @@
+
 'use client';
 import type { Metadata } from 'next';
 import { Nav } from '@/components/nav';
@@ -83,3 +84,5 @@ export default function AppLayout({
         </div>
   );
 }
+
+    
