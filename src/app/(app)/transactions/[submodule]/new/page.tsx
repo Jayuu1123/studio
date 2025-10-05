@@ -42,7 +42,7 @@ import { unslugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
 import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp } from 'firebase/firestore';
+import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp, runTransaction } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import type { TransactionEntry, FormField, AppSubmodule } from '@/lib/types';
@@ -180,7 +180,7 @@ export default function NewTransactionEntryPage() {
 
 
   const handleSaveEntry = async () => {
-    if (!firestore) {
+    if (!firestore || !submoduleId) {
       toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to the database.' });
       return;
     }
@@ -215,34 +215,38 @@ export default function NewTransactionEntryPage() {
             description: `Entry ${finalData.docNo} has been updated.`,
         });
     } else {
-        const q = query(
-          entriesCollection,
-          where('submodule', '==', submoduleName),
-          orderBy('docNo_sequential', 'desc'),
-          limit(1)
-        );
+        const counterRef = doc(firestore, 'counters', submoduleId);
 
-        const querySnapshot = await getDocs(q);
-        let nextDocNo = 1;
-        if (!querySnapshot.empty) {
-          const latestEntry = querySnapshot.docs[0].data() as TransactionEntry;
-          nextDocNo = (latestEntry.docNo_sequential || 0) + 1;
+        try {
+            const newSequentialNo = await runTransaction(firestore, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                const currentCount = counterDoc.exists() ? counterDoc.data().count : 0;
+                const nextCount = currentCount + 1;
+                transaction.set(counterRef, { count: nextCount }, { merge: true });
+                return nextCount;
+            });
+            
+            const newEntry: Partial<TransactionEntry> = {
+                ...finalData,
+                submodule: submoduleName,
+                docNo: `tic/25-26/${newSequentialNo}`,
+                docNo_sequential: newSequentialNo,
+                createdAt: serverTimestamp(),
+            };
+            
+            addDocumentNonBlocking(entriesCollection, newEntry);
+            
+            toast({
+                title: 'Entry Saved',
+                description: `New entry for ${submoduleName} has been saved with Doc No: ${newEntry.docNo}`,
+            });
+
+        } catch (error) {
+            console.error("Transaction failed: ", error);
+            toast({ variant: 'destructive', title: 'Failed to Save', description: 'Could not generate a document number. Please try again.' });
+            return; // Stop execution if we can't get a number
         }
 
-        const newEntry: Partial<TransactionEntry> = {
-            ...finalData,
-            submodule: submoduleName,
-            docNo: `tic/25-26/${nextDocNo}`,
-            docNo_sequential: nextDocNo,
-            createdAt: serverTimestamp(),
-        };
-        
-        addDocumentNonBlocking(entriesCollection, newEntry);
-        
-        toast({
-            title: 'Entry Saved',
-            description: `New entry for ${submoduleName} has been saved with Doc No: ${newEntry.docNo}`,
-        });
     }
     router.push(`/transactions/${submoduleSlug}`);
   };
