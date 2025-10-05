@@ -17,7 +17,6 @@ import {
   HeartHandshake,
   ArrowRightLeft,
   FileText,
-  Database,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -44,7 +43,6 @@ const mobileNavItems = [
     { href: '/crm', icon: HeartHandshake, label: 'CRM' },
     { href: '/reports', icon: LineChart, label: 'Reports' },
     { href: '/form-setting', icon: FileText, label: 'Form Setting' },
-    { href: '/database', icon: Database, label: 'Database' },
     { href: '/settings', icon: Settings, label: 'Settings' },
 ];
 
