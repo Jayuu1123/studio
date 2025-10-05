@@ -53,7 +53,7 @@
         "status": {
           "type": "string",
           "enum": ["A", "D", "L", "P"],
-          "description": "The status of the entry (Approved, Denied, Locked, Pending)."
+          "description": "The status of the entry (Approved, Denied, Locked, Pending/Draft)."
         },
         "user": {
           "type": "string",

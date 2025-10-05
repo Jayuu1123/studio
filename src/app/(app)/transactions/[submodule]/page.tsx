@@ -6,6 +6,7 @@ import {
   Search,
   RefreshCw,
   Lock,
+  Edit,
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -47,13 +48,13 @@ import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 const statusConfig: {
   [key: string]: {
     label: string;
-    color: 'bg-green-500' | 'bg-red-500' | 'bg-yellow-500' | 'bg-gray-400';
+    color: 'bg-green-500' | 'bg-red-500' | 'bg-purple-500' | 'bg-gray-400';
     icon?: React.ReactNode;
   };
 } = {
   A: { label: 'Approved', color: 'bg-green-500' },
   D: { label: 'Denied', color: 'bg-red-500' },
-  P: { label: 'Pending', color: 'bg-yellow-500' },
+  P: { label: 'Draft', color: 'bg-purple-500' },
   L: { label: 'Locked', color: 'bg-gray-400', icon: <Lock className="h-3 w-3 text-white" /> },
 };
 
@@ -84,12 +85,10 @@ export default function TransactionSubmodulePage() {
   };
 
   const handleDuplicateEntry = (entry: TransactionEntry) => {
-    // Navigate to the 'new' page with query params to pre-fill the form
     router.push(`/transactions/${submodule}/new?duplicateId=${entry.id}`);
   };
 
   const handleEditEntry = (entry: TransactionEntry) => {
-    // Navigate to the 'new' page but with an 'editId' to indicate editing
     router.push(`/transactions/${submodule}/new?editId=${entry.id}`);
   };
 
@@ -200,7 +199,10 @@ export default function TransactionSubmodulePage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleEditEntry(entry)}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditEntry(entry)}>
+                          <Edit className='mr-2 h-4 w-4' />
+                          View / Edit
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDuplicateEntry(entry)}>Duplicate</DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-500"

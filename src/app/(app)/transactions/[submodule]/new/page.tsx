@@ -3,19 +3,16 @@ import Link from 'next/link';
 import {
   ChevronLeft,
   PlusCircle,
-  MoreVertical,
   Upload,
   Printer,
   Copy,
   Trash2,
+  Edit,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -37,7 +34,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
 import { unslugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
@@ -46,37 +42,37 @@ import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import type { TransactionEntry, FormField, AppSubmodule } from '@/lib/types';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 
 
-function DynamicFormField({ field, value, onChange }: { field: FormField, value: any, onChange: (fieldId: string, value: any) => void }) {
+function DynamicFormField({ field, value, onChange, disabled }: { field: FormField, value: any, onChange: (fieldId: string, value: any) => void, disabled: boolean }) {
     const fieldId = field.name.toLowerCase().replace(/\s/g, '-');
     switch (field.type) {
         case 'text':
             return (
                 <div className="grid gap-3">
                     <Label htmlFor={fieldId}>{field.name}</Label>
-                    <Input id={fieldId} value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} />
+                    <Input id={fieldId} value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} disabled={disabled} />
                 </div>
             );
         case 'number':
             return (
                 <div className="grid gap-3">
                     <Label htmlFor={fieldId}>{field.name}</Label>
-                    <Input id={fieldId} type="number" value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} />
+                    <Input id={fieldId} type="number" value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} disabled={disabled} />
                 </div>
             );
         case 'date':
              return (
                 <div className="grid gap-3">
                     <Label htmlFor={fieldId}>{field.name}</Label>
-                    <DatePicker date={value ? new Date(value) : undefined} setDate={(d) => onChange(field.id!, d)} />
+                    <DatePicker date={value ? new Date(value) : undefined} setDate={(d) => onChange(field.id!, d)} disabled={disabled} />
                 </div>
             );
         case 'boolean':
              return (
                 <div className="flex items-center gap-2 pt-4">
-                    <Checkbox id={fieldId} checked={value || false} onCheckedChange={(c) => onChange(field.id!, c)} />
+                    <Checkbox id={fieldId} checked={value || false} onCheckedChange={(c) => onChange(field.id!, c)} disabled={disabled} />
                     <Label htmlFor={fieldId}>{field.name}</Label>
                 </div>
             );
@@ -84,7 +80,7 @@ function DynamicFormField({ field, value, onChange }: { field: FormField, value:
             return (
                 <div className="grid gap-3">
                     <Label htmlFor={fieldId}>{field.name}</Label>
-                    <Select value={value} onValueChange={(v) => onChange(field.id!, v)}>
+                    <Select value={value} onValueChange={(v) => onChange(field.id!, v)} disabled={disabled}>
                         <SelectTrigger id={fieldId}>
                             <SelectValue placeholder={`Select ${field.name}`} />
                         </SelectTrigger>
@@ -119,6 +115,8 @@ export default function NewTransactionEntryPage() {
       customFields: {},
       lineItems: [{}], // Start with one empty line item
   });
+  
+  const [isEditing, setIsEditing] = useState(!editId);
 
   const submoduleQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -136,8 +134,8 @@ export default function NewTransactionEntryPage() {
 
   const { data: allFormFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
   
-  const headerFields = useMemoFirebase(() => allFormFields?.filter(f => f.section === 'header') || [], [allFormFields]);
-  const detailFields = useMemoFirebase(() => allFormFields?.filter(f => f.section === 'detail') || [], [allFormFields]);
+  const headerFields = useMemo(() => allFormFields?.filter(f => f.section === 'header') || [], [allFormFields]);
+  const detailFields = useMemo(() => allFormFields?.filter(f => f.section === 'detail') || [], [allFormFields]);
 
   const docToLoadRef = useMemoFirebase(() => {
     if (!firestore || (!duplicateId && !editId)) return null;
@@ -154,7 +152,8 @@ export default function NewTransactionEntryPage() {
             delete dataToLoad.id;
             delete dataToLoad.docNo;
             delete dataToLoad.docNo_sequential;
-            dataToLoad.status = 'P';
+            dataToLoad.status = 'P'; // Start as a draft/pending
+            setIsEditing(true); // Duplicates should be editable
         }
         
         // Convert Timestamps back to JS Dates for DatePicker and other components
@@ -169,7 +168,6 @@ export default function NewTransactionEntryPage() {
         };
         convertTimestamps(dataToLoad);
 
-        // Ensure lineItems is an array with at least one object
         if (!dataToLoad.lineItems || dataToLoad.lineItems.length === 0) {
             dataToLoad.lineItems = [{}];
         }
@@ -179,21 +177,17 @@ export default function NewTransactionEntryPage() {
   }, [loadedEntry, duplicateId]);
 
 
-  const handleSaveEntry = async () => {
+  const handleSaveEntry = async (submissionStatus: 'P' | 'A') => {
     if (!firestore || !submoduleId) {
       toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to the database.' });
       return;
     }
     
-    const entriesCollection = collection(firestore, 'transactionEntries');
-    
-    // Create a deep copy to avoid mutating state directly
     const finalData = JSON.parse(JSON.stringify(formData));
+    finalData.status = submissionStatus;
 
-    // Convert all date objects back to Firestore Timestamps before saving
     const convertDatesToTimestamps = (obj: any) => {
         for (const key in obj) {
-            // Check if it's a string that looks like a date (from JSON stringify)
             if (typeof obj[key] === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(obj[key])) {
                 const d = new Date(obj[key]);
                 if (!isNaN(d.getTime())) {
@@ -207,11 +201,11 @@ export default function NewTransactionEntryPage() {
     convertDatesToTimestamps(finalData);
 
 
-    if (editId) {
+    if (editId && !duplicateId) {
         const docRef = doc(firestore, 'transactionEntries', editId);
         setDocumentNonBlocking(docRef, finalData, { merge: true });
         toast({
-            title: 'Entry Updated',
+            title: `Entry ${submissionStatus === 'A' ? 'Submitted' : 'Saved'}`,
             description: `Entry ${finalData.docNo} has been updated.`,
         });
     } else {
@@ -234,17 +228,17 @@ export default function NewTransactionEntryPage() {
                 createdAt: serverTimestamp(),
             };
             
-            addDocumentNonBlocking(entriesCollection, newEntry);
+            addDocumentNonBlocking(collection(firestore, 'transactionEntries'), newEntry);
             
             toast({
-                title: 'Entry Saved',
-                description: `New entry for ${submoduleName} has been saved with Doc No: ${newEntry.docNo}`,
+                title: `Entry ${submissionStatus === 'A' ? 'Submitted' : 'Saved'}`,
+                description: `New entry saved with Doc No: ${newEntry.docNo}`,
             });
 
         } catch (error) {
             console.error("Transaction failed: ", error);
             toast({ variant: 'destructive', title: 'Failed to Save', description: 'Could not generate a document number. Please try again.' });
-            return; // Stop execution if we can't get a number
+            return;
         }
 
     }
@@ -288,6 +282,13 @@ export default function NewTransactionEntryPage() {
   if (isLoadingEntry || isLoadingFields) {
     return <div>Loading...</div>
   }
+  
+  const pageTitle = editId && !duplicateId
+    ? `View ${submoduleName} Entry`
+    : duplicateId
+    ? `Duplicate ${submoduleName} Entry`
+    : `New ${submoduleName} Entry`;
+
 
   return (
     <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
@@ -299,29 +300,27 @@ export default function NewTransactionEntryPage() {
           </Link>
         </Button>
         <h1 className="flex-1 shrink-0 whitespace-nowrap text-xl font-semibold font-headline tracking-tight sm:grow-0">
-          {editId ? `Edit ${submoduleName} Entry` : duplicateId ? `Duplicate ${submoduleName} Entry` : `New ${submoduleName} Entry`}
+          {isEditing ? pageTitle.replace('View', 'Edit') : pageTitle}
         </h1>
 
         <div className="hidden items-center gap-2 md:ml-auto md:flex">
-           <Button variant="outline">
-            <Copy className="h-4 w-4 mr-2" />
-            Duplicate
-          </Button>
-          <Button variant="outline">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-          <Button variant="outline">
-            <Upload className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button onClick={handleSaveEntry}>Save Entry</Button>
+           {editId && !isEditing && (
+             <Button onClick={() => setIsEditing(true)}>
+               <Edit className="h-4 w-4 mr-2" />
+               Edit Entry
+             </Button>
+           )}
+           {isEditing && (
+             <>
+                <Button variant="outline" onClick={() => handleSaveEntry('P')}>Save as Draft</Button>
+                <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
+             </>
+           )}
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="grid auto-rows-max items-start gap-4 lg:col-span-3">
           
-          {/* Header Fields Section */}
           <Card>
             <CardHeader>
               <CardTitle>Principle</CardTitle>
@@ -335,6 +334,7 @@ export default function NewTransactionEntryPage() {
                         field={field} 
                         value={formData.customFields?.[field.id!] || ''}
                         onChange={handleHeaderFieldChange}
+                        disabled={!isEditing}
                     />
                 ))}
                 {!isLoadingFields && headerFields?.length === 0 && (
@@ -344,15 +344,16 @@ export default function NewTransactionEntryPage() {
             </CardContent>
           </Card>
 
-          {/* Detail Fields Section */}
            <Card>
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <CardTitle>Indent Detail</CardTitle>
-                        <Button size="sm" onClick={addLineItem}>
-                            <PlusCircle className="h-4 w-4 mr-2" />
-                            Add Row
-                        </Button>
+                        {isEditing && (
+                           <Button size="sm" onClick={addLineItem}>
+                                <PlusCircle className="h-4 w-4 mr-2" />
+                                Add Row
+                           </Button>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -362,9 +363,11 @@ export default function NewTransactionEntryPage() {
                                 {detailFields.map(field => (
                                     <TableHead key={field.id}>{field.name}</TableHead>
                                 ))}
+                                {isEditing && (
                                 <TableHead className="w-[50px]">
                                     <span className="sr-only">Actions</span>
                                 </TableHead>
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -372,25 +375,27 @@ export default function NewTransactionEntryPage() {
                                 <TableRow key={rowIndex}>
                                     {detailFields.map(field => (
                                         <TableCell key={field.id}>
-                                            {/* We render a simple input for all types in the table for simplicity */}
-                                            {/* A more robust solution might use a switch or different components */}
                                             <Input
                                                 type={field.type === 'number' ? 'number' : 'text'}
                                                 value={item[field.id!] || ''}
                                                 onChange={(e) => handleDetailFieldChange(rowIndex, field.id!, e.target.value)}
                                                 className="w-full"
+                                                disabled={!isEditing}
                                             />
                                         </TableCell>
                                     ))}
+                                    {isEditing && (
                                     <TableCell>
                                         <Button
                                             variant="ghost"
                                             size="icon"
                                             onClick={() => removeLineItem(rowIndex)}
+                                            disabled={!isEditing}
                                         >
                                             <Trash2 className="h-4 w-4 text-red-500" />
                                         </Button>
                                     </TableCell>
+                                    )}
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -403,10 +408,18 @@ export default function NewTransactionEntryPage() {
         </div>
       </div>
       <div className="flex items-center justify-center gap-2 md:hidden">
-        <Button variant="outline" size="sm">
-          Discard
-        </Button>
-        <Button size="sm" onClick={handleSaveEntry}>Save Entry</Button>
+         {editId && !isEditing && (
+             <Button onClick={() => setIsEditing(true)}>
+               <Edit className="h-4 w-4 mr-2" />
+               Edit Entry
+             </Button>
+           )}
+           {isEditing && (
+             <>
+                <Button variant="outline" onClick={() => handleSaveEntry('P')}>Save as Draft</Button>
+                <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
+             </>
+           )}
       </div>
     </div>
   );
