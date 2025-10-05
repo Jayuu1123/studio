@@ -1,6 +1,6 @@
 'use client';
 import { useState } from "react";
-import { MoreHorizontal, PlusCircle } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Trash2, UserX } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -26,9 +26,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, doc } from 'firebase/firestore';
+import { collection, doc, updateDoc } from 'firebase/firestore';
 import type { User } from "@/lib/types";
-import { deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
 import { AddUserDialog } from "@/components/settings/add-user-dialog";
 
@@ -57,16 +56,18 @@ export default function UserManagementPage() {
     };
 
 
-    const handleDeleteUser = (userId: string) => {
+    const handleDisableUser = async (userId: string) => {
         if (!firestore) {
             toast({ variant: "destructive", title: "Error", description: "Firestore not available." });
             return;
         }
-        // Note: This only deletes the Firestore document, not the Firebase Auth user.
-        // A full implementation would require a backend function to delete the auth user.
         const userDocRef = doc(firestore, 'users', userId);
-        deleteDocumentNonBlocking(userDocRef);
-        toast({ title: "User Deleted", description: "The user document has been deleted." });
+        try {
+            await updateDoc(userDocRef, { status: 'disabled' });
+            toast({ title: "User Disabled", description: "The user has been disabled and can no longer log in." });
+        } catch (error) {
+            toast({ variant: "destructive", title: "Error", description: "Failed to disable user." });
+        }
     }
 
   return (
@@ -94,19 +95,23 @@ export default function UserManagementPage() {
                 <TableHead>Username</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Roles</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={4} className="text-center">Loading users...</TableCell></TableRow>}
+              {isLoading && <TableRow><TableCell colSpan={5} className="text-center">Loading users...</TableCell></TableRow>}
               {!isLoading && users?.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow key={user.id} className={user.status === 'disabled' ? 'text-muted-foreground opacity-60' : ''}>
                   <TableCell className="font-medium">{user.username}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
                     {user.roles?.map(role => <Badge key={role} variant="secondary" className="mr-1 capitalize">{role}</Badge>)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={user.status === 'disabled' ? 'destructive' : 'default'} className="capitalize">{user.status}</Badge>
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -118,9 +123,10 @@ export default function UserManagementPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleOpenDialog(user)}>Edit</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => user.id && handleDeleteUser(user.id)} className="text-red-500">
-                          Delete
+                        <DropdownMenuItem onClick={() => handleOpenDialog(user)} disabled={user.status === 'disabled'}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => user.id && handleDisableUser(user.id)} className="text-red-500" disabled={user.status === 'disabled'}>
+                          <UserX className="mr-2 h-4 w-4" />
+                          Disable
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -129,7 +135,7 @@ export default function UserManagementPage() {
               ))}
               {!isLoading && !users?.length && (
                 <TableRow>
-                    <TableCell colSpan={4} className="text-center">No users found.</TableCell>
+                    <TableCell colSpan={5} className="text-center">No users found.</TableCell>
                 </TableRow>
               )}
             </TableBody>

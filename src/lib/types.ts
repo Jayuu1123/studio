@@ -11,6 +11,7 @@ export type User = {
   username: string;
   email: string;
   roles: string[];
+  status: 'active' | 'disabled';
 }
 
 export type Role = {

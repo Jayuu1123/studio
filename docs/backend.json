@@ -370,12 +370,18 @@
           "items": {
             "type": "string"
           }
+        },
+        "status": {
+            "type": "string",
+            "enum": ["active", "disabled"],
+            "description": "The current status of the user account."
         }
       },
       "required": [
         "id",
         "username",
-        "email"
+        "email",
+        "status"
       ]
     },
     "TransactionCode": {
@@ -1503,3 +1509,5 @@
 }
 
     
+
+  

@@ -85,7 +85,8 @@ export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogPr
                     id: newUserId,
                     username: username,
                     email: email,
-                    roles: [selectedRole]
+                    roles: [selectedRole],
+                    status: 'active'
                 });
             }
             toast({ title: "User Created", description: "The new user has been added successfully." });

@@ -3,15 +3,16 @@
 import React, { useEffect, useState } from 'react';
 import { Nav } from '@/components/nav';
 import { Header } from '@/components/header';
-import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { initiateAnonymousSignIn } from '@/firebase/non-blocking-login';
 import { doc, setDoc, getDoc, collection, query, where, Timestamp } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import type { License, User } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ShieldAlert } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { ShieldAlert, UserX } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
 
 function LicenseWall() {
     return (
@@ -33,6 +34,34 @@ function LicenseWall() {
     );
 }
 
+function DisabledAccountWall() {
+    const auth = useAuth();
+    const router = useRouter();
+
+    const handleLogout = async () => {
+        if (auth) {
+            await signOut(auth);
+            router.push('/');
+        }
+    }
+
+    return (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="text-center p-8 bg-card border rounded-lg shadow-lg max-w-md mx-4">
+                <UserX className="mx-auto h-16 w-16 text-destructive mb-4" />
+                <h2 className="text-2xl font-bold font-headline mb-2">Account Disabled</h2>
+                <p className="text-muted-foreground mb-6">
+                    Your account has been disabled by an administrator. Please contact support if you believe this is an error.
+                </p>
+                <Button onClick={handleLogout} className="mt-6">
+                    Logout
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+
 export default function AppLayout({
   children,
 }: Readonly<{
@@ -42,7 +71,15 @@ export default function AppLayout({
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const pathname = usePathname();
+  const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: userData } = useDoc<User>(userDocRef);
 
   const activeLicenseQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -66,6 +103,19 @@ export default function AppLayout({
     }
   }, [activeLicenses]);
 
+   useEffect(() => {
+        if (userData && userData.status === 'disabled') {
+            if (auth) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Account Disabled',
+                    description: 'Your account has been disabled. Logging you out.',
+                });
+                // The wall will be displayed, and the user can log out from there.
+            }
+        }
+    }, [userData, auth, toast]);
+
   useEffect(() => {
     const setupAdmin = async () => {
         if (!auth || !firestore) return;
@@ -85,7 +135,8 @@ export default function AppLayout({
                     username: 'sa',
                     email: adminEmail,
                     id: adminUID,
-                    roles: ['admin']
+                    roles: ['admin'],
+                    status: 'active'
                 });
                 console.log("Admin user and roles document created in Firestore.");
             }
@@ -106,6 +157,10 @@ export default function AppLayout({
       initiateAnonymousSignIn(auth);
     }
   }, [auth, user, isUserLoading]);
+
+  if (userData && userData.status === 'disabled') {
+    return <DisabledAccountWall />;
+  }
 
   const shouldShowWall = isLicensed === false && !pathname.startsWith('/settings') && pathname !== '/';
 
