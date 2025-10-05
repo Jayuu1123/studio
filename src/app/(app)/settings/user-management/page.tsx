@@ -1,4 +1,3 @@
-
 'use client';
 import { useState } from "react";
 import { MoreHorizontal, PlusCircle } from "lucide-react";
@@ -37,6 +36,8 @@ export default function UserManagementPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+    const [userToEdit, setUserToEdit] = useState<User | undefined>(undefined);
+
 
     const usersQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -44,6 +45,17 @@ export default function UserManagementPage() {
     }, [firestore]);
 
     const { data: users, isLoading } = useCollection<User>(usersQuery);
+
+    const handleOpenDialog = (user?: User) => {
+      setUserToEdit(user);
+      setIsAddUserOpen(true);
+    };
+
+    const handleCloseDialog = () => {
+      setIsAddUserOpen(false);
+      setUserToEdit(undefined);
+    };
+
 
     const handleDeleteUser = (userId: string) => {
         if (!firestore) {
@@ -66,7 +78,7 @@ export default function UserManagementPage() {
                 Add, remove, and manage users and their roles.
             </p>
         </div>
-        <Button onClick={() => setIsAddUserOpen(true)}>
+        <Button onClick={() => handleOpenDialog()}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add User
         </Button>
       </div>
@@ -106,7 +118,7 @@ export default function UserManagementPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleOpenDialog(user)}>Edit</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => user.id && handleDeleteUser(user.id)} className="text-red-500">
                           Delete
                         </DropdownMenuItem>
@@ -124,7 +136,7 @@ export default function UserManagementPage() {
           </Table>
         </CardContent>
       </Card>
-      <AddUserDialog isOpen={isAddUserOpen} setIsOpen={setIsAddUserOpen} />
+      <AddUserDialog isOpen={isAddUserOpen} setIsOpen={handleCloseDialog} userToEdit={userToEdit} />
     </>
   );
 }

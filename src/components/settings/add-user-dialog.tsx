@@ -12,19 +12,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { setDoc, doc, collection } from "firebase/firestore";
-import type { Role } from "@/lib/types";
+import { setDoc, doc, collection, updateDoc } from "firebase/firestore";
+import type { Role, User } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 interface AddUserDialogProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  userToEdit?: User;
 }
 
-export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
+export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogProps) {
   const { toast } = useToast();
   const firestore = useFirestore();
   const [email, setEmail] = useState("");
@@ -32,6 +33,22 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
   const [username, setUsername] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const isEditMode = Boolean(userToEdit);
+
+  useEffect(() => {
+    if (isEditMode && userToEdit) {
+        setUsername(userToEdit.username);
+        setEmail(userToEdit.email);
+        setSelectedRole(userToEdit.roles?.[0] || "");
+    } else {
+        // Reset form for create mode
+        setUsername("");
+        setEmail("");
+        setPassword("");
+        setSelectedRole("");
+    }
+  }, [userToEdit, isEditMode, isOpen]);
   
   const rolesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -40,40 +57,45 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
 
   const { data: roles } = useCollection<Role>(rolesQuery);
 
-  const handleAddUser = async () => {
-    if (!email || !password || !username || !selectedRole) {
-      toast({ variant: "destructive", title: "Error", description: "Please fill all fields, including role." });
+  const handleSaveUser = async () => {
+    if ((!email || !password && !isEditMode) || !username || !selectedRole) {
+      toast({ variant: "destructive", title: "Error", description: "Please fill all required fields." });
       return;
     }
 
     setIsLoading(true);
 
     try {
-        const auth = getAuth();
-        
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const newUserId = userCredential.user.uid;
-
-        if (firestore) {
-            await setDoc(doc(firestore, "users", newUserId), {
-                id: newUserId,
+        if (isEditMode && userToEdit?.id) {
+            // Update existing user
+            const userDocRef = doc(firestore!, "users", userToEdit.id);
+            await updateDoc(userDocRef, {
                 username: username,
-                email: email,
-                roles: [selectedRole] // Assign selected role
+                roles: [selectedRole]
             });
+            toast({ title: "User Updated", description: "The user has been updated successfully." });
+        } else {
+            // Create new user
+            const auth = getAuth();
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const newUserId = userCredential.user.uid;
+
+            if (firestore) {
+                await setDoc(doc(firestore, "users", newUserId), {
+                    id: newUserId,
+                    username: username,
+                    email: email,
+                    roles: [selectedRole]
+                });
+            }
+            toast({ title: "User Created", description: "The new user has been added successfully." });
         }
 
-      toast({ title: "User Created", description: "The new user has been added successfully." });
       setIsOpen(false);
-      // Reset form
-      setEmail("");
-      setPassword("");
-      setUsername("");
-      setSelectedRole("");
 
     } catch (error: any) {
-      console.error("Error creating user:", error);
-      toast({ variant: "destructive", title: "Error creating user", description: error.message });
+      console.error("Error saving user:", error);
+      toast({ variant: "destructive", title: "Error saving user", description: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -83,9 +105,9 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New User</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit User' : 'Add New User'}</DialogTitle>
           <DialogDescription>
-            Create a new user and assign them a role.
+            {isEditMode ? "Update the user's details below." : "Create a new user and assign them a role."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -99,14 +121,16 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
             <Label htmlFor="email" className="text-right">
               Email
             </Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="col-span-3" />
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="col-span-3" disabled={isEditMode} />
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="password" className="text-right">
-              Password
-            </Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="col-span-3" />
-          </div>
+          {!isEditMode && (
+            <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="password" className="text-right">
+                Password
+                </Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="col-span-3" />
+            </div>
+          )}
            <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="role" className="text-right">
               Role
@@ -125,8 +149,8 @@ export function AddUserDialog({ isOpen, setIsOpen }: AddUserDialogProps) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-          <Button type="submit" onClick={handleAddUser} disabled={isLoading}>
-            {isLoading ? "Creating..." : "Create User"}
+          <Button type="submit" onClick={handleSaveUser} disabled={isLoading}>
+            {isLoading ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save Changes" : "Create User")}
           </Button>
         </DialogFooter>
       </DialogContent>
