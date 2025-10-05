@@ -25,7 +25,7 @@ export type Customer = {
 
 export type Product = {
   id: string;
-  name: string;
+  name:string;
   category: string;
   stock: number;
   price: number;
@@ -50,7 +50,8 @@ export type TransactionEntry = {
   docNo?: string;
   docNo_sequential?: number;
   createdAt?: any;
-  customFields?: { [key: string]: any }; // To store dynamic field data
+  customFields?: { [key: string]: any }; // To store dynamic header field data
+  lineItems?: { [key: string]: any }[]; // To store dynamic detail/grid data
   // Deprecated fields, kept for old data compatibility
   category?: string;
   date?: any;
@@ -71,6 +72,7 @@ export type FormField = {
   formDefinitionId: string; // Corresponds to submoduleId
   name: string;
   type: string; // e.g., 'text', 'number', 'date', 'boolean', 'select'
+  section: 'header' | 'detail'; // Defines where the field appears
 }
 
 export type Order = {

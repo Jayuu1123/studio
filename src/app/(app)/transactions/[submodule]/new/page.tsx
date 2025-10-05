@@ -7,6 +7,7 @@ import {
   Upload,
   Printer,
   Copy,
+  Trash2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -44,7 +46,7 @@ import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import type { TransactionEntry, FormField, AppSubmodule } from '@/lib/types';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 
 function DynamicFormField({ field, value, onChange }: { field: FormField, value: any, onChange: (fieldId: string, value: any) => void }) {
@@ -115,6 +117,7 @@ export default function NewTransactionEntryPage() {
       status: 'P',
       user: 'Current User', // Should be replaced with actual user
       customFields: {},
+      lineItems: [{}], // Start with one empty line item
   });
 
   const submoduleQuery = useMemoFirebase(() => {
@@ -128,11 +131,14 @@ export default function NewTransactionEntryPage() {
 
   const formFieldsQuery = useMemoFirebase(() => {
     if(!firestore || !submoduleId) return null;
-    return collection(firestore, 'appSubmodules', submoduleId, 'formFields');
+    return query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'), orderBy('name'));
   }, [firestore, submoduleId]);
 
-  const { data: formFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
+  const { data: allFormFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
   
+  const headerFields = useMemoFirebase(() => allFormFields?.filter(f => f.section === 'header') || [], [allFormFields]);
+  const detailFields = useMemoFirebase(() => allFormFields?.filter(f => f.section === 'detail') || [], [allFormFields]);
+
   const docToLoadRef = useMemoFirebase(() => {
     if (!firestore || (!duplicateId && !editId)) return null;
     const id = duplicateId || editId;
@@ -150,18 +156,24 @@ export default function NewTransactionEntryPage() {
             delete dataToLoad.docNo_sequential;
             dataToLoad.status = 'P';
         }
-        if (dataToLoad.date && dataToLoad.date instanceof Timestamp) {
-            dataToLoad.date = dataToLoad.date.toDate();
-        }
-        // Handle custom fields, which might be Timestamps
-        if (dataToLoad.customFields) {
-            Object.keys(dataToLoad.customFields).forEach(key => {
-                const value = dataToLoad.customFields[key];
-                if (value instanceof Timestamp) {
-                    dataToLoad.customFields[key] = value.toDate();
+        
+        // Convert Timestamps back to JS Dates for DatePicker and other components
+        const convertTimestamps = (obj: any) => {
+            for (const key in obj) {
+                if (obj[key] instanceof Timestamp) {
+                    obj[key] = obj[key].toDate();
+                } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                    convertTimestamps(obj[key]);
                 }
-            });
+            }
+        };
+        convertTimestamps(dataToLoad);
+
+        // Ensure lineItems is an array with at least one object
+        if (!dataToLoad.lineItems || dataToLoad.lineItems.length === 0) {
+            dataToLoad.lineItems = [{}];
         }
+
         setFormData(dataToLoad);
     }
   }, [loadedEntry, duplicateId]);
@@ -174,17 +186,26 @@ export default function NewTransactionEntryPage() {
     }
     
     const entriesCollection = collection(firestore, 'transactionEntries');
-    const finalData = { ...formData };
+    
+    // Create a deep copy to avoid mutating state directly
+    const finalData = JSON.parse(JSON.stringify(formData));
 
-    // Convert all date objects in customFields to Firestore Timestamps
-    if (finalData.customFields) {
-        Object.keys(finalData.customFields).forEach(key => {
-            const value = finalData.customFields[key];
-            if (value instanceof Date) {
-                finalData.customFields[key] = Timestamp.fromDate(value);
+    // Convert all date objects back to Firestore Timestamps before saving
+    const convertDatesToTimestamps = (obj: any) => {
+        for (const key in obj) {
+            // Check if it's a string that looks like a date (from JSON stringify)
+            if (typeof obj[key] === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(obj[key])) {
+                const d = new Date(obj[key]);
+                if (!isNaN(d.getTime())) {
+                    obj[key] = Timestamp.fromDate(d);
+                }
+            } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                convertDatesToTimestamps(obj[key]);
             }
-        });
-    }
+        }
+    };
+    convertDatesToTimestamps(finalData);
+
 
     if (editId) {
         const docRef = doc(firestore, 'transactionEntries', editId);
@@ -226,7 +247,7 @@ export default function NewTransactionEntryPage() {
     router.push(`/transactions/${submoduleSlug}`);
   };
 
-  const handleCustomFieldChange = (fieldId: string, value: any) => {
+  const handleHeaderFieldChange = (fieldId: string, value: any) => {
     setFormData(prev => ({ 
         ...prev, 
         customFields: {
@@ -235,6 +256,30 @@ export default function NewTransactionEntryPage() {
         }
     }));
   };
+
+  const handleDetailFieldChange = (rowIndex: number, fieldId: string, value: any) => {
+    setFormData(prev => {
+      const newLineItems = [...(prev.lineItems || [])];
+      if (!newLineItems[rowIndex]) newLineItems[rowIndex] = {};
+      newLineItems[rowIndex][fieldId] = value;
+      return { ...prev, lineItems: newLineItems };
+    });
+  };
+
+  const addLineItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      lineItems: [...(prev.lineItems || []), {}]
+    }));
+  };
+
+  const removeLineItem = (rowIndex: number) => {
+    setFormData(prev => ({
+      ...prev,
+      lineItems: (prev.lineItems || []).filter((_, index) => index !== rowIndex)
+    }));
+  };
+
 
   if (isLoadingEntry || isLoadingFields) {
     return <div>Loading...</div>
@@ -270,61 +315,87 @@ export default function NewTransactionEntryPage() {
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="grid auto-rows-max items-start gap-4 lg:col-span-2">
+        <div className="grid auto-rows-max items-start gap-4 lg:col-span-3">
           
-          {/* Dynamic Form Section */}
+          {/* Header Fields Section */}
           <Card>
             <CardHeader>
-              <CardTitle>{submoduleName} Details</CardTitle>
+              <CardTitle>Principle</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {isLoadingFields && <p>Loading form...</p>}
-                {formFields && formFields.map(field => (
+                {headerFields && headerFields.map(field => (
                     <DynamicFormField 
                         key={field.id} 
                         field={field} 
                         value={formData.customFields?.[field.id!] || ''}
-                        onChange={handleCustomFieldChange}
+                        onChange={handleHeaderFieldChange}
                     />
                 ))}
-                {!isLoadingFields && formFields?.length === 0 && (
-                    <p className="text-muted-foreground md:col-span-2">No fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/design`} className="text-primary underline">Design the form now</Link>.</p>
+                {!isLoadingFields && headerFields?.length === 0 && (
+                    <p className="text-muted-foreground md:col-span-full">No header fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/header`} className="text-primary underline">Design the form now</Link>.</p>
                 )}
               </div>
             </CardContent>
           </Card>
-        </div>
-        
-        {/* Right Sidebar Section */}
-        <div className="grid auto-rows-max items-start gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-6">
-                <div className="grid gap-3">
-                    <Label>Doc No</Label>
-                    <p className="text-sm font-medium text-muted-foreground">{formData.docNo || 'Will be generated on save'}</p>
-                </div>
-                <div className="grid gap-3">
-                    <Label htmlFor="status">Status</Label>                    
-                    <Select value={formData.status} onValueChange={(v) => setFormData(p => ({...p, status: v as any}))} disabled={!editId}>
-                        <SelectTrigger id="status" aria-label="Select status">
-                        <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                        <SelectItem value="P">Pending</SelectItem>
-                        <SelectItem value="A">Approved</SelectItem>
-                        <SelectItem value="D">Denied</SelectItem>
-                        <SelectItem value="L">Locked</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+
+          {/* Detail Fields Section */}
+           <Card>
+                <CardHeader>
+                    <div className="flex justify-between items-center">
+                        <CardTitle>Indent Detail</CardTitle>
+                        <Button size="sm" onClick={addLineItem}>
+                            <PlusCircle className="h-4 w-4 mr-2" />
+                            Add Row
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                {detailFields.map(field => (
+                                    <TableHead key={field.id}>{field.name}</TableHead>
+                                ))}
+                                <TableHead className="w-[50px]">
+                                    <span className="sr-only">Actions</span>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {formData.lineItems?.map((item, rowIndex) => (
+                                <TableRow key={rowIndex}>
+                                    {detailFields.map(field => (
+                                        <TableCell key={field.id}>
+                                            {/* We render a simple input for all types in the table for simplicity */}
+                                            {/* A more robust solution might use a switch or different components */}
+                                            <Input
+                                                type={field.type === 'number' ? 'number' : 'text'}
+                                                value={item[field.id!] || ''}
+                                                onChange={(e) => handleDetailFieldChange(rowIndex, field.id!, e.target.value)}
+                                                className="w-full"
+                                            />
+                                        </TableCell>
+                                    ))}
+                                    <TableCell>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => removeLineItem(rowIndex)}
+                                        >
+                                            <Trash2 className="h-4 w-4 text-red-500" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                    {detailFields.length === 0 && (
+                         <p className="text-muted-foreground text-center py-4">No detail fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/details`} className="text-primary underline">Design the form now</Link>.</p>
+                    )}
+                </CardContent>
+            </Card>
         </div>
       </div>
       <div className="flex items-center justify-center gap-2 md:hidden">

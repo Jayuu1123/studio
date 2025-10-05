@@ -57,8 +57,8 @@ export default function DesignFormPage() {
                     <div className="flex-1">
                         <p className="text-sm text-muted-foreground">
                             <Link href="/form-setting" className="hover:underline">Form Setting</Link> &gt; 
-                            <Link href={`/transactions/${submodule?.mainModule.toLowerCase()}`} className="hover:underline"> {submodule?.mainModule}</Link> &gt; 
-                            <span className="font-medium text-foreground"> {submodule?.name}</span>
+                             <span className="font-medium text-foreground"> {submodule?.name}</span> &gt;
+                             <span className="font-medium text-foreground"> Basic</span>
                         </p>
                     </div>
                 </div>

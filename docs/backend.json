@@ -1,4 +1,4 @@
-
+{
 {
   "entities": {
     "AppSubmodule": {
@@ -74,8 +74,16 @@
         },
         "customFields": {
           "type": "object",
-          "description": "A map of custom field data, where keys are formField IDs.",
+          "description": "A map of custom header field data, where keys are formField IDs.",
           "additionalProperties": true
+        },
+        "lineItems": {
+            "type": "array",
+            "description": "An array of line item objects for the detail grid.",
+            "items": {
+                "type": "object",
+                "additionalProperties": true
+            }
         }
       },
       "required": [
@@ -144,13 +152,19 @@
         "type": {
           "type": "string",
           "description": "Data type of the field (e.g., text, number, date, boolean, select)."
+        },
+        "section": {
+          "type": "string",
+          "enum": ["header", "detail"],
+          "description": "The section of the form where the field will be displayed."
         }
       },
       "required": [
         "id",
         "formDefinitionId",
         "name",
-        "type"
+        "type",
+        "section"
       ]
     },
     "LookupTable": {

@@ -1,11 +1,18 @@
 'use client';
 import { cn } from "@/lib/utils";
-import { Settings, FileText, FileUp, ShieldCheck } from "lucide-react";
+import { Settings, FileText, FileUp, ShieldCheck, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
+import React from "react";
 
-const navItems = [
-    { name: 'Basic', icon: Settings, href: 'basic' },
+interface NavItem {
+    name: string;
+    icon: LucideIcon;
+    href: string;
+}
+
+const navItems: NavItem[] = [
+    { name: 'Basic', icon: Settings, href: 'design' },
     { name: 'Header', icon: FileText, href: 'header' },
     { name: 'Details', icon: FileText, href: 'details' },
     { name: 'Report', icon: FileUp, href: 'report' },
@@ -14,25 +21,29 @@ const navItems = [
 
 export function FormSettingSidebar() {
     const params = useParams();
-    // This is a placeholder for active tab logic.
-    // In a real app, you would likely use a sub-route or query param.
-    const activeTab = 'basic'; 
+    const pathname = usePathname();
+    const submoduleId = params.submoduleId as string;
 
     return (
         <nav className="flex flex-col gap-2">
-            {navItems.map((item) => (
-                <Link
-                    key={item.name}
-                    href="#" // In a real app, this would be `/form-setting/${params.submoduleId}/${item.href}`
-                    className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
-                        activeTab === item.href.toLowerCase() && "bg-primary/10 text-primary font-semibold"
-                    )}
-                >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.name}</span>
-                </Link>
-            ))}
+            {navItems.map((item) => {
+                const href = `/form-setting/${submoduleId}/${item.href}`;
+                const isActive = pathname.endsWith(item.href);
+                
+                return (
+                    <Link
+                        key={item.name}
+                        href={href}
+                        className={cn(
+                            "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
+                            isActive && "bg-primary/10 text-primary font-semibold"
+                        )}
+                    >
+                        <item.icon className="h-5 w-5" />
+                        <span>{item.name}</span>
+                    </Link>
+                )
+            })}
         </nav>
     );
 }
