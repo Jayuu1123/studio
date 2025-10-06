@@ -185,17 +185,17 @@ export default function ManagePermissionsPage() {
                 
                 return (
                     <AccordionItem value={moduleSlug} key={moduleSlug}>
-                         <div className="flex items-center gap-4">
-                             <div className="py-4 flex items-center gap-4">
+                        <AccordionTrigger disabled={relatedSubmodules.length === 0} className="hover:no-underline">
+                             <div className="flex items-center gap-4 flex-1">
                                 <Checkbox
                                     id={moduleSlug}
                                     checked={!!permissions[moduleSlug]}
                                     onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
+                                    onClick={(e) => e.stopPropagation()} // prevent accordion from toggling when clicking checkbox
                                 />
                                 <Label htmlFor={moduleSlug} className="text-lg font-semibold cursor-pointer">{moduleName}</Label>
                             </div>
-                            <AccordionTrigger className="p-0" disabled={relatedSubmodules.length === 0} />
-                        </div>
+                        </AccordionTrigger>
                         <AccordionContent className="pl-12">
                             {relatedSubmodules.length > 0 ? (
                                 <div className="space-y-4">
