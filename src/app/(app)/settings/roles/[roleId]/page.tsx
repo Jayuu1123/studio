@@ -81,7 +81,7 @@ export default function ManagePermissionsPage() {
           const newPerms = JSON.parse(JSON.stringify(prev));
 
           // Ensure main module entry exists and is an object
-          if (typeof newPerms[mainModuleSlug] !== 'object') {
+          if (typeof newPerms[mainModuleSlug] !== 'object' || newPerms[mainModuleSlug] === true) {
               newPerms[mainModuleSlug] = {};
           }
           
@@ -99,7 +99,11 @@ export default function ManagePermissionsPage() {
               delete newPerms[mainModuleSlug][submoduleSlug];
             }
              if (Object.keys(newPerms[mainModuleSlug]).length === 0) {
-              delete newPerms[mainModuleSlug];
+              // If we just removed the last submodule permission, we shouldn't delete the main module key
+              // if the main module checkbox is still checked. We'll handle this by setting it to `true`
+              // if it's empty, but only if the main checkbox is intended to be checked.
+              // This part is tricky, we'll rely on the main checkbox handler to set it to `true`.
+              // For now, just clean up sub-objects.
             }
           }
 
@@ -181,15 +185,16 @@ export default function ManagePermissionsPage() {
                 
                 return (
                     <AccordionItem value={moduleSlug} key={moduleSlug}>
-                        <div className="flex items-center gap-4 py-4">
-                             <Checkbox
-                                id={moduleSlug}
-                                checked={!!permissions[moduleSlug]}
-                                onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
-                            />
-                            <AccordionTrigger className="p-0 flex-1" disabled={relatedSubmodules.length === 0}>
+                         <div className="flex items-center gap-4">
+                             <div className="py-4 flex items-center gap-4">
+                                <Checkbox
+                                    id={moduleSlug}
+                                    checked={!!permissions[moduleSlug]}
+                                    onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
+                                />
                                 <Label htmlFor={moduleSlug} className="text-lg font-semibold cursor-pointer">{moduleName}</Label>
-                            </AccordionTrigger>
+                            </div>
+                            <AccordionTrigger className="p-0" disabled={relatedSubmodules.length === 0} />
                         </div>
                         <AccordionContent className="pl-12">
                             {relatedSubmodules.length > 0 ? (
