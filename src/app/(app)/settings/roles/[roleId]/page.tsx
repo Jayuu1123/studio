@@ -68,7 +68,9 @@ export default function ManagePermissionsPage() {
     setPermissions(prev => {
       const newPerms = { ...prev };
       if (checked) {
-        newPerms[moduleSlug] = true;
+        // When a main module is checked, we give it an empty object
+        // to signify it's accessible, allowing for sub-permissions.
+        newPerms[moduleSlug] = newPerms[moduleSlug] || {};
       } else {
         delete newPerms[moduleSlug];
       }
@@ -80,10 +82,12 @@ export default function ManagePermissionsPage() {
       setPermissions(prev => {
           const newPerms = JSON.parse(JSON.stringify(prev));
 
+          // Ensure the main module permission object exists
           if (typeof newPerms[mainModuleSlug] !== 'object' || newPerms[mainModuleSlug] === true) {
               newPerms[mainModuleSlug] = {};
           }
           
+          // Ensure the submodule permission object exists
           if (typeof newPerms[mainModuleSlug][submoduleSlug] !== 'object') {
               newPerms[mainModuleSlug][submoduleSlug] = {};
           }
@@ -92,6 +96,7 @@ export default function ManagePermissionsPage() {
             newPerms[mainModuleSlug][submoduleSlug][action] = true;
           } else {
             delete newPerms[mainModuleSlug][submoduleSlug][action];
+            // Clean up empty objects
             if (Object.keys(newPerms[mainModuleSlug][submoduleSlug]).length === 0) {
               delete newPerms[mainModuleSlug][submoduleSlug];
             }
@@ -180,7 +185,7 @@ export default function ManagePermissionsPage() {
                        <div className="flex items-center border-b">
                             <div className="p-4">
                                 <Checkbox
-                                    id={moduleSlug}
+                                    id={`main-${moduleSlug}`}
                                     checked={!!permissions[moduleSlug]}
                                     onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
                                     aria-label={`Enable ${moduleName} module`}
@@ -193,14 +198,14 @@ export default function ManagePermissionsPage() {
                                 <span className="flex-1 text-left">{moduleName}</span>
                             </AccordionTrigger>
                         </div>
-                        <AccordionContent className="pl-12">
+                        <AccordionContent className="pl-12 pt-4">
                             {relatedSubmodules.length > 0 ? (
-                                <div className="space-y-4 pt-4">
+                                <div className="space-y-4">
                                     {relatedSubmodules.map(sub => {
                                         const subSlug = slugify(sub.name);
                                         return (
-                                            <div key={sub.id} className="border-l pl-4">
-                                                <h4 className="font-medium mb-2">{sub.name}</h4>
+                                            <div key={sub.id} className="border-l-2 pl-4 py-2 space-y-2">
+                                                <h4 className="font-semibold text-base">{sub.name}</h4>
                                                 <div className="flex items-center gap-6">
                                                      <div className="flex items-center gap-2">
                                                         <Checkbox 
@@ -232,7 +237,7 @@ export default function ManagePermissionsPage() {
                                     })}
                                 </div>
                             ) : (
-                                <p className="text-sm text-muted-foreground pt-4">No user-defined submodules. Access is granted to the main module.</p>
+                                <p className="text-sm text-muted-foreground pt-2">No user-defined submodules. Access is granted to the main module.</p>
                             )}
                         </AccordionContent>
                     </AccordionItem>

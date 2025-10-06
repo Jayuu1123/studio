@@ -53,11 +53,13 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     return dynamicSubmodules.filter(sub => {
         const mainModuleSlug = slugify(sub.mainModule);
         const submoduleSlug = slugify(sub.name);
+        // @ts-ignore
         const mainModulePerms = permissions[mainModuleSlug];
         
-        if (mainModulePerms === true) return true;
+        if (mainModulePerms === true) return true; // Legacy support, grants access to all submodules
 
-        if (typeof mainModulePerms === 'object') {
+        if (typeof mainModulePerms === 'object' && mainModulePerms !== null) {
+            // New hierarchical check: grants access if user has 'read' permission for the specific submodule.
             // @ts-ignore
             const subPerms = mainModulePerms[submoduleSlug];
             return subPerms?.read;
@@ -113,4 +115,3 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     </div>
   );
 }
-

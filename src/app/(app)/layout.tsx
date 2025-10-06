@@ -76,6 +76,7 @@ export default function AppLayout({
   const router = useRouter();
   const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
+  const [permissions, setPermissions] = useState<PermissionSet | null>(null);
   
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -83,6 +84,34 @@ export default function AppLayout({
   }, [firestore, user]);
 
   const { data: userData, isLoading: isUserDataLoading } = useDoc<User>(userDocRef);
+  
+  const userRoles = userData?.roles || [];
+  
+  const rolesQuery = useMemoFirebase(() => {
+    if (!firestore || userRoles.length === 0) return null;
+    return query(collection(firestore, 'roles'), where('name', 'in', userRoles.map(r => r.toLowerCase())));
+  }, [firestore, userRoles]);
+
+  const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
+
+
+  useEffect(() => {
+    // Super admin check
+    if (userData?.email === 'sa@admin.com') {
+      setPermissions({ all: true });
+      return;
+    }
+    
+    // Once roles are loaded, merge their permissions
+    if (!isLoadingRoles && roleDocs) {
+      const mergedPermissions: PermissionSet = {};
+      roleDocs.forEach(role => {
+        Object.assign(mergedPermissions, role.permissions);
+      });
+      setPermissions(mergedPermissions);
+    }
+  }, [userData, roleDocs, isLoadingRoles]);
+
 
   const activeLicenseQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -93,17 +122,6 @@ export default function AppLayout({
   }, [firestore, user]);
 
   const { data: activeLicenses, isLoading: isLoadingLicenses } = useCollection<License>(activeLicenseQuery);
-
-  const permissions: PermissionSet = useMemo(() => {
-    if (!userData) return {};
-    if (userData.email === 'sa@admin.com') return { all: true };
-    // Basic permissions from roles - a full implementation would merge these from a roles collection
-    if (userData.roles?.includes('admin')) return { all: true };
-    
-    // Default to an empty set if no specific logic matches
-    return {};
-  }, [userData]);
-
 
   useEffect(() => {
     if (isLoadingLicenses) return;
@@ -161,6 +179,7 @@ export default function AppLayout({
             const adminRoleSnap = await getDoc(adminRoleRef);
             if (!adminRoleSnap.exists()) {
                 await setDoc(adminRoleRef, {
+                    id: 'admin',
                     name: 'Admin',
                     description: 'Super administrator with all permissions.',
                     permissions: { all: true }
@@ -178,7 +197,7 @@ export default function AppLayout({
                     username: 'sa',
                     email: adminEmail,
                     id: adminUID,
-                    roles: ['admin'],
+                    roles: ['Admin'],
                     status: 'active'
                 });
                 console.log("Admin user and roles document created in Firestore.");
@@ -201,8 +220,10 @@ export default function AppLayout({
     }
   }, [auth, user, isUserLoading]);
 
-  // The main loading gate. Do not render children until we know who the user is, have their data, and license status.
-  if (isUserLoading || (user && isUserDataLoading) || isLicensed === null) {
+  // The main loading gate. Do not render children until all data is ready.
+  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null;
+
+  if (isAppLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />

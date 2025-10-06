@@ -71,7 +71,7 @@ export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogPr
             const userDocRef = doc(firestore!, "users", userToEdit.id);
             await updateDoc(userDocRef, {
                 username: username,
-                roles: [selectedRole]
+                roles: [selectedRole] // Store the role name directly
             });
             toast({ title: "User Updated", description: "The user has been updated successfully." });
         } else {
@@ -85,7 +85,7 @@ export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogPr
                     id: newUserId,
                     username: username,
                     email: email,
-                    roles: [selectedRole],
+                    roles: [selectedRole], // Store the role name directly
                     status: 'active'
                 });
             }
@@ -142,7 +142,7 @@ export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogPr
                 </SelectTrigger>
                 <SelectContent>
                     {roles?.map(role => (
-                        <SelectItem key={role.id} value={role.name.toLowerCase()}>{role.name}</SelectItem>
+                        <SelectItem key={role.id} value={role.name}>{role.name}</SelectItem>
                     ))}
                 </SelectContent>
             </Select>

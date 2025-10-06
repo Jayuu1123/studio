@@ -15,12 +15,17 @@ export type User = {
   sessionId?: string;
 }
 
-export type PermissionSet = {
-  [key: string]: boolean | {
+export type SubmodulePermissions = {
+  [submoduleSlug: string]: {
     read?: boolean;
     write?: boolean;
     delete?: boolean;
   }
+}
+
+export type PermissionSet = {
+  all?: boolean;
+  [mainModuleSlug: string]: boolean | SubmodulePermissions;
 }
 
 export type Role = {

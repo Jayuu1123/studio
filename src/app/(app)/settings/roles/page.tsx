@@ -67,7 +67,7 @@ export default function RolesPage() {
     const newRole: Omit<Role, 'id'> = {
       name: roleName,
       description: roleDescription,
-      permissions: [],
+      permissions: {}, // Start with empty permissions
     };
 
     const rolesCollection = collection(firestore, 'roles');
