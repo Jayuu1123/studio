@@ -88,12 +88,12 @@ export default function AppLayout({
   const { data: userData, isLoading: isUserDataLoading } = useDoc<User>(userDocRef);
 
   const activeLicenseQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || !user) return null;
     return query(
         collection(firestore, 'licenses'), 
         where('status', '==', 'active')
     );
-  }, [firestore]);
+  }, [firestore, user]);
 
   const { data: activeLicenses } = useCollection<License>(activeLicenseQuery);
 
@@ -178,7 +178,7 @@ export default function AppLayout({
             }
         } catch (error: any) {
             if (error.code === 'auth/email-already-in-use') {
-                console.log("Admin auth user already exists.");
+                // This is expected if the admin user already exists, so we can ignore it.
             } else {
                 console.error("Failed to set up admin user:", error);
             }
@@ -195,65 +195,65 @@ export default function AppLayout({
   }, [auth, user, isUserLoading]);
 
     useEffect(() => {
-    const fetchPermissions = async () => {
-      // Defer permission fetching until we are sure who the user is and have their data.
-      if (isUserLoading || isUserDataLoading) {
-        return;
-      }
-      
-      // We have a definitive answer on the user, but they have no specific data in /users
-      if (!userData) {
-        setPermissions({});
-        setIsLoadingPermissions(false);
-        return;
-      }
-      
-      const roles = userData.roles || [];
-      
-      // **CRITICAL FIX**: Explicitly check for admin role and grant all permissions.
-      if (roles.includes('admin')) {
-        setPermissions({ all: true });
-        setIsLoadingPermissions(false);
-        return;
-      }
-      
-      if (roles.length === 0) {
-        setPermissions({});
-        setIsLoadingPermissions(false);
-        return;
-      }
-
-      let combinedPermissions: PermissionSet = {};
-      try {
-        const roleQuery = query(collection(firestore, 'roles'), where('name', 'in', roles));
-        const roleSnapshots = await getDocs(roleQuery);
-        
-        roleSnapshots.forEach(doc => {
-            const roleData = doc.data() as Role;
-            if(roleData.permissions) {
-                for (const key in roleData.permissions) {
-                    const existingPerm = combinedPermissions[key];
-                    const newPerm = roleData.permissions[key];
-
-                    if (typeof existingPerm === 'object' && typeof newPerm === 'object') {
-                         combinedPermissions[key] = { ...existingPerm, ...newPerm };
-                    } else {
-                         combinedPermissions[key] = newPerm;
-                    }
+        const fetchPermissions = async () => {
+            // Defer permission fetching until we are sure who the user is and have their data.
+            if (isUserLoading || isUserDataLoading || !userData) {
+                // If user is not loaded or user data is not loaded, we can't determine permissions yet.
+                // If there's no userData, it means they are either anonymous or their user doc doesn't exist.
+                if(!isUserLoading && !isUserDataLoading) {
+                    setPermissions({});
+                    setIsLoadingPermissions(false);
                 }
+                return;
             }
-        });
-        setPermissions(combinedPermissions);
-      } catch (error) {
-        console.error("Error fetching permissions:", error);
-        setPermissions({});
-      } finally {
-        setIsLoadingPermissions(false);
-      }
-    };
+            
+            const roles = userData.roles || [];
+            
+            if (roles.includes('admin')) {
+                setPermissions({ all: true });
+                setIsLoadingPermissions(false);
+                return;
+            }
+            
+            if (roles.length === 0) {
+                setPermissions({});
+                setIsLoadingPermissions(false);
+                return;
+            }
 
-    fetchPermissions();
-  }, [firestore, userData, isUserLoading, isUserDataLoading]);
+            let combinedPermissions: PermissionSet = {};
+            try {
+                const roleQuery = query(collection(firestore!, 'roles'), where('name', 'in', roles));
+                const roleSnapshots = await getDocs(roleQuery);
+                
+                roleSnapshots.forEach(doc => {
+                    const roleData = doc.data() as Role;
+                    if(roleData.permissions) {
+                        // Deep merge permissions
+                        for (const key in roleData.permissions) {
+                            const existingPerm = combinedPermissions[key];
+                            const newPerm = roleData.permissions[key];
+
+                            if (typeof existingPerm === 'object' && typeof newPerm === 'object' && !Array.isArray(existingPerm) && !Array.isArray(newPerm)) {
+                                combinedPermissions[key] = { ...existingPerm, ...newPerm };
+                            } else {
+                                combinedPermissions[key] = newPerm;
+                            }
+                        }
+                    }
+                });
+                setPermissions(combinedPermissions);
+            } catch (error) {
+                console.error("Error fetching permissions:", error);
+                setPermissions({});
+            } finally {
+                setIsLoadingPermissions(false);
+            }
+        };
+
+        fetchPermissions();
+    }, [firestore, userData, isUserLoading, isUserDataLoading]);
+
 
   if (isUserLoading || isLoadingPermissions || isLicensed === null) {
     return (
@@ -294,4 +294,3 @@ export default function AppLayout({
   );
 }
 
-    
