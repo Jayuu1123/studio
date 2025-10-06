@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, updateDoc, collection, query, orderBy, where } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, orderBy } from 'firebase/firestore';
 import type { Role, AppSubmodule, PermissionSet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,7 +16,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { slugify } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -54,7 +54,7 @@ export default function ManagePermissionsPage() {
 
   const submodulesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+    return query(collection(firestore, 'appSubmodules'), orderBy('mainModule'), orderBy('position'));
   }, [firestore]);
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
@@ -63,49 +63,74 @@ export default function ManagePermissionsPage() {
       setPermissions(role.permissions);
     }
   }, [role]);
+  
+  const groupedSubmodules = useMemo(() => {
+    if (!submodules) return {};
+    return submodules.reduce((acc, sub) => {
+      if (!acc[sub.mainModule]) {
+        acc[sub.mainModule] = [];
+      }
+      acc[sub.mainModule].push(sub);
+      return acc;
+    }, {} as Record<string, AppSubmodule[]>);
+  }, [submodules]);
 
-  const handleModulePermissionChange = (moduleSlug: string, checked: boolean) => {
+
+  const handleMainModuleChange = (moduleSlug: string, isChecked: boolean) => {
     setPermissions(prev => {
       const newPerms = { ...prev };
-      if (checked) {
-        // When a main module is checked, we give it an empty object
-        // to signify it's accessible, allowing for sub-permissions.
+      if (isChecked) {
+        // Add the module with an empty object to signify access
+        // but no specific submodule perms yet.
         newPerms[moduleSlug] = newPerms[moduleSlug] || {};
       } else {
+        // Remove the entire module entry
         delete newPerms[moduleSlug];
       }
       return newPerms;
     });
   };
 
-  const handleSubmodulePermissionChange = (mainModuleSlug: string, submoduleSlug: string, action: 'read' | 'write' | 'delete', checked: boolean) => {
-      setPermissions(prev => {
-          const newPerms = JSON.parse(JSON.stringify(prev));
+  const handleSubmodulePermissionChange = (mainModuleSlug: string, submoduleSlug: string, action: 'read' | 'write' | 'delete', isChecked: boolean) => {
+    setPermissions(prev => {
+      const newPerms = JSON.parse(JSON.stringify(prev)); // Deep copy
 
-          // Ensure the main module permission object exists
-          if (typeof newPerms[mainModuleSlug] !== 'object' || newPerms[mainModuleSlug] === true) {
-              newPerms[mainModuleSlug] = {};
-          }
-          
-          // Ensure the submodule permission object exists
-          if (typeof newPerms[mainModuleSlug][submoduleSlug] !== 'object') {
-              newPerms[mainModuleSlug][submoduleSlug] = {};
-          }
-          
-          if (checked) {
-            newPerms[mainModuleSlug][submoduleSlug][action] = true;
-          } else {
-            delete newPerms[mainModuleSlug][submoduleSlug][action];
-            // Clean up empty objects
-            if (Object.keys(newPerms[mainModuleSlug][submoduleSlug]).length === 0) {
-              delete newPerms[mainModuleSlug][submoduleSlug];
-            }
-          }
+      // Ensure main module exists
+      newPerms[mainModuleSlug] = newPerms[mainModuleSlug] || {};
+      
+      // Ensure it's an object for sub-permissions
+      if (newPerms[mainModuleSlug] === true) {
+         newPerms[mainModuleSlug] = {};
+      }
 
-          return newPerms;
-      });
+      // Ensure submodule object exists
+      newPerms[mainModuleSlug][submoduleSlug] = newPerms[mainModuleSlug][submoduleSlug] || {};
+
+      if (isChecked) {
+        newPerms[mainModuleSlug][submoduleSlug][action] = true;
+      } else {
+        delete newPerms[mainModuleSlug][submoduleSlug][action];
+        // Clean up empty objects
+        if (Object.keys(newPerms[mainModuleSlug][submoduleSlug]).length === 0) {
+          delete newPerms[mainModuleSlug][submoduleSlug];
+        }
+      }
+      
+      return newPerms;
+    });
   };
 
+  const getSubmodulePermission = (mainModuleSlug: string, submoduleSlug: string, action: 'read' | 'write' | 'delete'): boolean => {
+    const mainPerm = permissions[mainModuleSlug];
+    if (typeof mainPerm === 'object' && mainPerm !== null) {
+      // @ts-ignore
+      const subPerm = mainPerm[submoduleSlug];
+      if (typeof subPerm === 'object' && subPerm !== null) {
+        return !!subPerm[action];
+      }
+    }
+    return false;
+  };
 
   const handleSaveChanges = async () => {
     if (!roleRef) return;
@@ -126,29 +151,8 @@ export default function ManagePermissionsPage() {
     }
   };
   
-  const getSubmodulePermission = (mainModuleSlug: string, submoduleSlug: string, action: 'read' | 'write' | 'delete') => {
-      const mainModulePerms = permissions[mainModuleSlug];
-      if (typeof mainModulePerms === 'object' && mainModulePerms !== null) {
-          // @ts-ignore
-          return !!mainModulePerms[submoduleSlug]?.[action];
-      }
-      return false;
-  }
-  
-  const groupedSubmodules = useMemo(() => {
-    if (!submodules) return {};
-    
-    return submodules.reduce((acc, sub) => {
-        if (!acc[sub.mainModule]) {
-            acc[sub.mainModule] = [];
-        }
-        acc[sub.mainModule].push(sub);
-        return acc;
-    }, {} as {[key: string]: AppSubmodule[]});
-  }, [submodules]);
-
   if (isLoadingRole || isLoadingSubmodules) {
-    return <div>Loading...</div>;
+    return <div className="flex items-center justify-center h-48"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
   if (!role) {
@@ -174,76 +178,64 @@ export default function ManagePermissionsPage() {
             Select the modules and actions this role should have access to.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Accordion type="multiple" className="w-full">
-            {ALL_MAIN_MODULES.map((moduleName) => {
-                const moduleSlug = slugify(moduleName);
-                const relatedSubmodules = groupedSubmodules[moduleName] || [];
+        <CardContent className="space-y-4">
+          {ALL_MAIN_MODULES.map((moduleName) => {
+            const moduleSlug = slugify(moduleName);
+            const relatedSubmodules = groupedSubmodules[moduleName] || [];
+
+            return (
+              <div key={moduleSlug} className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center space-x-3">
+                   <Checkbox
+                    id={`perm-${moduleSlug}`}
+                    checked={!!permissions[moduleSlug]}
+                    onCheckedChange={(checked) => handleMainModuleChange(moduleSlug, !!checked)}
+                  />
+                  <Label htmlFor={`perm-${moduleSlug}`} className="text-lg font-semibold">{moduleName}</Label>
+                </div>
                 
-                return (
-                    <AccordionItem value={moduleSlug} key={moduleSlug}>
-                       <div className="flex items-center border-b">
-                            <div className="p-4">
+                {relatedSubmodules.length > 0 && (
+                  <div className="pl-8 space-y-3">
+                    <p className="text-sm font-medium text-muted-foreground">Submodule Permissions</p>
+                    {relatedSubmodules.map(submodule => {
+                      const submoduleSlug = slugify(submodule.name);
+                      return (
+                        <div key={submodule.id} className="border-l-2 pl-4 py-2">
+                           <p className="font-medium mb-2">{submodule.name}</p>
+                           <div className="flex items-center space-x-6">
+                              <div className="flex items-center space-x-2">
                                 <Checkbox
-                                    id={`main-${moduleSlug}`}
-                                    checked={!!permissions[moduleSlug]}
-                                    onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
-                                    aria-label={`Enable ${moduleName} module`}
+                                  id={`perm-${moduleSlug}-${submoduleSlug}-read`}
+                                  checked={getSubmodulePermission(moduleSlug, submoduleSlug, 'read')}
+                                  onCheckedChange={(checked) => handleSubmodulePermissionChange(moduleSlug, submoduleSlug, 'read', !!checked)}
                                 />
-                            </div>
-                            <AccordionTrigger
-                                disabled={relatedSubmodules.length === 0}
-                                className="flex-1 py-4 font-medium text-lg hover:no-underline [&[data-state=open]>svg]:rotate-180"
-                            >
-                                <span className="flex-1 text-left">{moduleName}</span>
-                            </AccordionTrigger>
+                                <Label htmlFor={`perm-${moduleSlug}-${submoduleSlug}-read`}>Read</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`perm-${moduleSlug}-${submoduleSlug}-write`}
+                                  checked={getSubmodulePermission(moduleSlug, submoduleSlug, 'write')}
+                                  onCheckedChange={(checked) => handleSubmodulePermissionChange(moduleSlug, submoduleSlug, 'write', !!checked)}
+                                />
+                                <Label htmlFor={`perm-${moduleSlug}-${submoduleSlug}-write`}>Write</Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`perm-${moduleSlug}-${submoduleSlug}-delete`}
+                                  checked={getSubmodulePermission(moduleSlug, submoduleSlug, 'delete')}
+                                  onCheckedChange={(checked) => handleSubmodulePermissionChange(moduleSlug, submoduleSlug, 'delete', !!checked)}
+                                />
+                                <Label htmlFor={`perm-${moduleSlug}-${submoduleSlug}-delete`}>Delete</Label>
+                              </div>
+                           </div>
                         </div>
-                        <AccordionContent className="pl-12 pt-4">
-                            {relatedSubmodules.length > 0 ? (
-                                <div className="space-y-4">
-                                    {relatedSubmodules.map(sub => {
-                                        const subSlug = slugify(sub.name);
-                                        return (
-                                            <div key={sub.id} className="border-l-2 pl-4 py-2 space-y-2">
-                                                <h4 className="font-semibold text-base">{sub.name}</h4>
-                                                <div className="flex items-center gap-6">
-                                                     <div className="flex items-center gap-2">
-                                                        <Checkbox 
-                                                            id={`${subSlug}-read`}
-                                                            checked={getSubmodulePermission(moduleSlug, subSlug, 'read')}
-                                                            onCheckedChange={(checked) => handleSubmodulePermissionChange(moduleSlug, subSlug, 'read', !!checked)}
-                                                        />
-                                                        <Label htmlFor={`${subSlug}-read`}>Read</Label>
-                                                    </div>
-                                                     <div className="flex items-center gap-2">
-                                                        <Checkbox 
-                                                            id={`${subSlug}-write`}
-                                                            checked={getSubmodulePermission(moduleSlug, subSlug, 'write')}
-                                                            onCheckedChange={(checked) => handleSubmodulePermissionChange(moduleSlug, subSlug, 'write', !!checked)}
-                                                        />
-                                                        <Label htmlFor={`${subSlug}-write`}>Write</Label>
-                                                    </div>
-                                                     <div className="flex items-center gap-2">
-                                                        <Checkbox 
-                                                            id={`${subSlug}-delete`}
-                                                            checked={getSubmodulePermission(moduleSlug, subSlug, 'delete')}
-                                                            onCheckedChange={(checked) => handleSubmodulePermissionChange(moduleSlug, subSlug, 'delete', !!checked)}
-                                                        />
-                                                        <Label htmlFor={`${subSlug}-delete`}>Delete</Label>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-muted-foreground pt-2">No user-defined submodules. Access is granted to the main module.</p>
-                            )}
-                        </AccordionContent>
-                    </AccordionItem>
-                )
-            })}
-          </Accordion>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </CardContent>
         <CardFooter>
           <Button onClick={handleSaveChanges}>Save Permissions</Button>

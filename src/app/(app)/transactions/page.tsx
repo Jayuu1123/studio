@@ -4,64 +4,46 @@
 import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query } from 'firebase/firestore';
 import type { AppSubmodule, PermissionSet } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { slugify } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
-const groupSubmodules = (submodules: AppSubmodule[]): { [key: string]: AppSubmodule[] } => {
-  return submodules.reduce((acc, submodule) => {
-    const mainModule = submodule.mainModule;
-    if (!acc[mainModule]) {
-      acc[mainModule] = [];
-    }
-    acc[mainModule].push(submodule);
-    return acc;
-  }, {} as { [key: string]: AppSubmodule[] });
-};
-
-const mainModuleOrder = [
-    'Transactions',
-    'Sales',
-    'Inventory',
-    'Purchase',
-    'CRM',
-    'Reports',
-    'User Management',
-];
-
 export default function TransactionsPage({ permissions }: { permissions: PermissionSet }) {
   const firestore = useFirestore();
 
   const submodulesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'appSubmodules'), where('mainModule', '==', 'Transactions'));
+    return query(collection(firestore, 'appSubmodules'));
   }, [firestore]);
 
-  const { data: dynamicSubmodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
-
+  const { data: allSubmodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
+  
   const filteredSubmodules = useMemo(() => {
-    if (!dynamicSubmodules || !permissions) return [];
+    if (!allSubmodules || !permissions) return [];
 
-    if (permissions.all) return dynamicSubmodules;
+    const transactionSubmodules = allSubmodules.filter(sub => sub.mainModule === 'Transactions');
+
+    if (permissions.all) {
+      return transactionSubmodules;
+    }
     
-    return dynamicSubmodules.filter(sub => {
-        const mainModuleSlug = slugify(sub.mainModule);
-        const subSlug = slugify(sub.name);
-        
-        // @ts-ignore
-        const mainModulePerms = permissions[mainModuleSlug];
+    // @ts-ignore
+    const transactionPermissions = permissions['transactions'];
+    if (typeof transactionPermissions !== 'object' || transactionPermissions === null) {
+        return [];
+    }
 
-        if (typeof mainModulePerms === 'object' && mainModulePerms !== null) {
-            // @ts-ignore
-            const subPerms = mainModulePerms[subSlug];
-            return subPerms?.read;
-        }
-        return false;
+    return transactionSubmodules.filter(sub => {
+        const subSlug = slugify(sub.name);
+        // @ts-ignore
+        return transactionPermissions[subSlug]?.read;
     });
-  }, [dynamicSubmodules, permissions]);
+
+  }, [allSubmodules, permissions]);
+
 
   if (isLoadingSubmodules || !permissions) {
       return (
@@ -71,31 +53,21 @@ export default function TransactionsPage({ permissions }: { permissions: Permiss
       );
   }
 
-  const groupedSubmodules = groupSubmodules(filteredSubmodules);
-  const sortedMainModules = Object.keys(groupedSubmodules).sort((a, b) => {
-    const indexA = mainModuleOrder.indexOf(a);
-    const indexB = mainModuleOrder.indexOf(b);
-    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
-    if (indexA === -1) return 1;
-    if (indexB === -1) return -1;
-    return indexA - indexB;
-  });
 
   return (
     <div className="space-y-6">
-      {sortedMainModules.length > 0 ?
-        sortedMainModules.map((mainModule) => (
-          <div key={mainModule}>
-            <h2 className="text-xl font-semibold mb-3 text-muted-foreground">
-              {mainModule}
-            </h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {groupedSubmodules[mainModule].map((submodule) => (
-                <SubmoduleCard key={submodule.id} submodule={submodule} />
-              ))}
-            </div>
+      {filteredSubmodules.length > 0 ? (
+        <div>
+          <h2 className="text-xl font-semibold mb-3 text-muted-foreground">
+            Transactions
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredSubmodules.map((submodule) => (
+              <SubmoduleCard key={submodule.id} submodule={submodule} />
+            ))}
           </div>
-        )) : (
+        </div>
+      ) : (
           <Card>
             <CardHeader>
               <CardTitle>No Accessible Submodules Found</CardTitle>
