@@ -11,7 +11,7 @@ import { useAuth, useFirestore } from '@/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
 function Logo() {
@@ -72,11 +72,11 @@ export default function LoginPage() {
         // Generate a new session ID
         const newSessionId = uuidv4();
         
-        // Update the user's document in Firestore with the new session ID
+        // Use setDoc with merge to safely create or update the user's document
         const userDocRef = doc(firestore, 'users', user.uid);
-        await updateDoc(userDocRef, {
+        await setDoc(userDocRef, {
             sessionId: newSessionId,
-        });
+        }, { merge: true });
 
         // Store the session ID in the client's session storage
         sessionStorage.setItem('userSessionId', newSessionId);
@@ -151,5 +151,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
