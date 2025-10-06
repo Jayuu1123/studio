@@ -118,7 +118,9 @@ export default function UserManagementPage() {
             </TableHeader>
             <TableBody>
               {isLoading && <TableRow><TableCell colSpan={5} className="text-center">Loading users...</TableCell></TableRow>}
-              {!isLoading && users?.map((user) => (
+              {!isLoading && users?.map((user) => {
+                const isSuperAdmin = user.email === 'sa@admin.com';
+                return (
                 <TableRow key={user.id} className={user.status === 'disabled' ? 'text-muted-foreground opacity-60' : ''}>
                   <TableCell className="font-medium">{user.username}</TableCell>
                   <TableCell>{user.email}</TableCell>
@@ -131,7 +133,7 @@ export default function UserManagementPage() {
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button aria-haspopup="true" size="icon" variant="ghost">
+                        <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isSuperAdmin}>
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Toggle menu</span>
                         </Button>
@@ -154,7 +156,8 @@ export default function UserManagementPage() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
               {!isLoading && !users?.length && (
                 <TableRow>
                     <TableCell colSpan={5} className="text-center">No users found.</TableCell>
