@@ -56,12 +56,19 @@ export default function UserManagementPage() {
     };
 
 
-    const handleDisableUser = async (userId: string) => {
+    const handleDisableUser = async (userToDisable: User) => {
         if (!firestore) {
             toast({ variant: "destructive", title: "Error", description: "Firestore not available." });
             return;
         }
-        const userDocRef = doc(firestore, 'users', userId);
+
+        // Critical Security Check: Prevent disabling the super admin.
+        if (userToDisable.email === 'sa@admin.com') {
+            toast({ variant: "destructive", title: "Action Forbidden", description: "The super administrator account cannot be disabled." });
+            return;
+        }
+
+        const userDocRef = doc(firestore, 'users', userToDisable.id!);
         try {
             await updateDoc(userDocRef, { status: 'disabled' });
             toast({ title: "User Disabled", description: "The user has been disabled and can no longer log in." });
@@ -133,16 +140,16 @@ export default function UserManagementPage() {
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button aria-haspopup="true" size="icon" variant="ghost">
+                        <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isSuperAdmin}>
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Toggle menu</span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleOpenDialog(user)} disabled={user.status === 'disabled' || isSuperAdmin}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleOpenDialog(user)}>Edit</DropdownMenuItem>
                          {user.status === 'active' ? (
-                          <DropdownMenuItem onClick={() => user.id && handleDisableUser(user.id)} className="text-red-500" disabled={isSuperAdmin}>
+                          <DropdownMenuItem onClick={() => handleDisableUser(user)} className="text-red-500">
                             <UserX className="mr-2 h-4 w-4" />
                             Disable
                           </DropdownMenuItem>
