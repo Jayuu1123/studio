@@ -16,7 +16,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ChevronLeft, ChevronDown } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { slugify } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -177,7 +177,7 @@ export default function ManagePermissionsPage() {
                 
                 return (
                     <AccordionItem value={moduleSlug} key={moduleSlug}>
-                        <div className="flex items-center border-b">
+                       <div className="flex items-center border-b">
                             <div className="p-4">
                                 <Checkbox
                                     id={moduleSlug}
