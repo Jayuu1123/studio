@@ -85,7 +85,7 @@ export default function AppLayout({
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
-  const { data: userData } = useDoc<User>(userDocRef);
+  const { data: userData, isLoading: isUserDataLoading } = useDoc<User>(userDocRef);
 
   const activeLicenseQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -196,13 +196,21 @@ export default function AppLayout({
 
     useEffect(() => {
     const fetchPermissions = async () => {
-      if (isUserLoading || !userData || !firestore) {
-        setIsLoadingPermissions(true);
+      // Defer permission fetching until we are sure who the user is and have their data.
+      if (isUserLoading || isUserDataLoading) {
+        return;
+      }
+      
+      // We have a definitive answer on the user, but they have no specific data in /users
+      if (!userData) {
+        setPermissions({});
+        setIsLoadingPermissions(false);
         return;
       }
       
       const roles = userData.roles || [];
       
+      // **CRITICAL FIX**: Explicitly check for admin role and grant all permissions.
       if (roles.includes('admin')) {
         setPermissions({ all: true });
         setIsLoadingPermissions(false);
@@ -245,7 +253,7 @@ export default function AppLayout({
     };
 
     fetchPermissions();
-  }, [firestore, userData, isUserLoading]);
+  }, [firestore, userData, isUserLoading, isUserDataLoading]);
 
   if (isUserLoading || isLoadingPermissions || isLicensed === null) {
     return (
@@ -259,18 +267,13 @@ export default function AppLayout({
     return <DisabledAccountWall />;
   }
 
-  const hasAccess = (module: string) => {
-    if (permissions.all) return true;
-    return permissions[slugify(module)];
-  };
-
   const isSettingsPath = pathname.startsWith('/settings');
   const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
   
   const childrenWithPermissions = React.Children.map(children, child => {
     if (React.isValidElement(child)) {
       // @ts-ignore
-      return React.cloneElement(child, { permissions, hasAccess });
+      return React.cloneElement(child, { permissions });
     }
     return child;
   });
