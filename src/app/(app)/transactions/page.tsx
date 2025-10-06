@@ -34,57 +34,60 @@ const mainModuleOrder = [
 export default function TransactionsPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
-  const [permissions, setPermissions] = React.useState<PermissionSet | null>(null);
 
-  // Fetch user data from 'users' collection
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
   const { data: userData, isLoading: isUserDataLoading } = useDoc<User>(userDocRef);
 
-  // Fetch roles based on user's roles
   const userRoles = userData?.roles || [];
   const rolesQuery = useMemoFirebase(() => {
     if (!firestore || userRoles.length === 0) return null;
-    return query(collection(firestore, 'roles'), where('name', 'in', userRoles));
+    // Firestore 'in' queries are limited to 30 items.
+    return query(collection(firestore, 'roles'), where('name', 'in', userRoles.slice(0, 30)));
   }, [firestore, userRoles]);
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
 
-  // Calculate permissions
-  React.useEffect(() => {
-    if (userData?.email === 'sa@admin.com') {
-      setPermissions({ all: true });
-      return;
-    }
-    
-    if (!isLoadingRoles && roleDocs) {
-      const mergedPermissions: PermissionSet = {};
-      roleDocs.forEach(role => {
-        Object.assign(mergedPermissions, role.permissions);
-      });
-      setPermissions(mergedPermissions);
-    }
-  }, [userData, roleDocs, isLoadingRoles]);
-
-
-  // Fetch all submodules
   const submodulesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'appSubmodules'), where('mainModule', '==', 'Transactions'));
   }, [firestore]);
   const { data: dynamicSubmodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
-  // Filter submodules based on calculated permissions
+  const permissions: PermissionSet | null = useMemo(() => {
+    if (isUserDataLoading || isLoadingRoles) return null;
+
+    if (userData?.email === 'sa@admin.com') {
+      return { all: true };
+    }
+    
+    if (roleDocs) {
+      const mergedPermissions: PermissionSet = {};
+      roleDocs.forEach(role => {
+        Object.assign(mergedPermissions, role.permissions);
+      });
+      return mergedPermissions;
+    }
+
+    return {};
+  }, [userData, roleDocs, isUserDataLoading, isLoadingRoles]);
+
+
+  const isLoading = isUserLoading || isLoadingSubmodules || permissions === null;
+
   const filteredSubmodules = useMemo(() => {
-    if (!dynamicSubmodules || !permissions) return [];
+    if (isLoading || !dynamicSubmodules || !permissions) return [];
+
     if (permissions.all) return dynamicSubmodules;
     
     return dynamicSubmodules.filter(sub => {
         const mainModuleSlug = slugify(sub.mainModule);
         const submoduleSlug = slugify(sub.name);
         
+        // @ts-ignore
         const mainModulePerms = permissions[mainModuleSlug];
+
         if (typeof mainModulePerms === 'object' && mainModulePerms !== null) {
             // @ts-ignore
             const subPerms = mainModulePerms[submoduleSlug];
@@ -92,10 +95,8 @@ export default function TransactionsPage() {
         }
         return false;
     });
-  }, [dynamicSubmodules, permissions]);
+  }, [dynamicSubmodules, permissions, isLoading]);
 
-  // Main loading gate for the component
-  const isLoading = isUserLoading || isUserDataLoading || isLoadingRoles || isLoadingSubmodules || permissions === null;
 
   if (isLoading) {
       return (
@@ -136,7 +137,7 @@ export default function TransactionsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                You do not have permission to view any submodules. Please contact an administrator.
+                You do not have permission to view any submodules in the Transactions module. Please contact an administrator.
               </p>
             </CardContent>
           </Card>
