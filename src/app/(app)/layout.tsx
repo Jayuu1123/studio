@@ -89,28 +89,32 @@ export default function AppLayout({
   
   const rolesQuery = useMemoFirebase(() => {
     if (!firestore || userRoles.length === 0) return null;
-    return query(collection(firestore, 'roles'), where('name', 'in', userRoles.map(r => r.toLowerCase())));
+    return query(collection(firestore, 'roles'), where('name', 'in', userRoles));
   }, [firestore, userRoles]);
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
 
 
   useEffect(() => {
-    // Super admin check
+    if (isUserDataLoading || isLoadingRoles) return;
+
     if (userData?.email === 'sa@admin.com') {
       setPermissions({ all: true });
       return;
     }
     
-    // Once roles are loaded, merge their permissions
-    if (!isLoadingRoles && roleDocs) {
+    if (roleDocs) {
       const mergedPermissions: PermissionSet = {};
       roleDocs.forEach(role => {
-        Object.assign(mergedPermissions, role.permissions);
+        if (role.permissions) {
+          Object.assign(mergedPermissions, role.permissions);
+        }
       });
       setPermissions(mergedPermissions);
+    } else {
+      setPermissions({});
     }
-  }, [userData, roleDocs, isLoadingRoles]);
+  }, [userData, roleDocs, isLoadingRoles, isUserDataLoading]);
 
 
   const activeLicenseQuery = useMemoFirebase(() => {

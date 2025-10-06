@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useMemo } from 'react';
 import Link from 'next/link';
-import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
-import { collection, query, where, doc } from 'firebase/firestore';
-import type { AppSubmodule, PermissionSet, User, Role } from '@/lib/types';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import type { AppSubmodule, PermissionSet } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { slugify } from '@/lib/utils';
@@ -31,74 +32,38 @@ const mainModuleOrder = [
     'User Management',
 ];
 
-export default function TransactionsPage() {
+export default function TransactionsPage({ permissions }: { permissions: PermissionSet }) {
   const firestore = useFirestore();
-  const { user, isUserLoading } = useUser();
-
-  const userDocRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-  const { data: userData, isLoading: isUserDataLoading } = useDoc<User>(userDocRef);
-
-  const userRoles = userData?.roles || [];
-  const rolesQuery = useMemoFirebase(() => {
-    if (!firestore || userRoles.length === 0) return null;
-    // Firestore 'in' queries are limited to 30 items.
-    return query(collection(firestore, 'roles'), where('name', 'in', userRoles.slice(0, 30)));
-  }, [firestore, userRoles]);
-  const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
 
   const submodulesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'appSubmodules'), where('mainModule', '==', 'Transactions'));
   }, [firestore]);
+
   const { data: dynamicSubmodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
-  const permissions: PermissionSet | null = useMemo(() => {
-    if (isUserDataLoading || isLoadingRoles) return null;
-
-    if (userData?.email === 'sa@admin.com') {
-      return { all: true };
-    }
-    
-    if (roleDocs) {
-      const mergedPermissions: PermissionSet = {};
-      roleDocs.forEach(role => {
-        Object.assign(mergedPermissions, role.permissions);
-      });
-      return mergedPermissions;
-    }
-
-    return {};
-  }, [userData, roleDocs, isUserDataLoading, isLoadingRoles]);
-
-
-  const isLoading = isUserLoading || isLoadingSubmodules || permissions === null;
-
   const filteredSubmodules = useMemo(() => {
-    if (isLoading || !dynamicSubmodules || !permissions) return [];
+    if (!dynamicSubmodules || !permissions) return [];
 
     if (permissions.all) return dynamicSubmodules;
     
     return dynamicSubmodules.filter(sub => {
         const mainModuleSlug = slugify(sub.mainModule);
-        const submoduleSlug = slugify(sub.name);
+        const subSlug = slugify(sub.name);
         
         // @ts-ignore
         const mainModulePerms = permissions[mainModuleSlug];
 
         if (typeof mainModulePerms === 'object' && mainModulePerms !== null) {
             // @ts-ignore
-            const subPerms = mainModulePerms[submoduleSlug];
+            const subPerms = mainModulePerms[subSlug];
             return subPerms?.read;
         }
         return false;
     });
-  }, [dynamicSubmodules, permissions, isLoading]);
+  }, [dynamicSubmodules, permissions]);
 
-
-  if (isLoading) {
+  if (isLoadingSubmodules || !permissions) {
       return (
           <div className="flex items-center justify-center h-48">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
