@@ -38,8 +38,8 @@ export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogPr
 
   useEffect(() => {
     if (isEditMode && userToEdit) {
-        setUsername(userToEdit.username);
-        setEmail(userToEdit.email);
+        setUsername(userToEdit.username || "");
+        setEmail(userToEdit.email || "");
         setSelectedRole(userToEdit.roles?.[0] || "");
     } else {
         // Reset form for create mode
