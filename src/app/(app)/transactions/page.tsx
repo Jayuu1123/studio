@@ -10,8 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { slugify } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
-// Helper function to group submodules by their mainModule
-const groupSubmodules = (submodules: AppSubmodule[]) => {
+const groupSubmodules = (submodules: AppSubmodule[]): { [key: string]: AppSubmodule[] } => {
   return submodules.reduce((acc, submodule) => {
     const mainModule = submodule.mainModule;
     if (!acc[mainModule]) {
@@ -21,6 +20,16 @@ const groupSubmodules = (submodules: AppSubmodule[]) => {
     return acc;
   }, {} as { [key: string]: AppSubmodule[] });
 };
+
+const mainModuleOrder = [
+    'Transactions',
+    'Sales',
+    'Inventory',
+    'Purchase',
+    'CRM',
+    'Reports',
+    'User Management',
+];
 
 interface TransactionsPageProps {
   permissions: PermissionSet;
@@ -34,17 +43,13 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     return query(collection(firestore, 'appSubmodules'), orderBy('position'));
   }, [firestore]);
 
-  const { data: dynamicSubmodules, isLoading } =
-    useCollection<AppSubmodule>(submodulesQuery);
+  const { data: dynamicSubmodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
 
   const filteredSubmodules = useMemo(() => {
-    // Wait until we have both submodules and permissions
-    if (!dynamicSubmodules || !permissions || Object.keys(permissions).length === 0) return null;
-    
-    // If user is admin, show everything
+    if (!dynamicSubmodules) return [];
     if (permissions.all) return dynamicSubmodules;
+    if (!permissions || Object.keys(permissions).length === 0) return [];
     
-    // Otherwise, filter based on permissions
     return dynamicSubmodules.filter(sub => {
         const mainModuleSlug = slugify(sub.mainModule);
         const submoduleSlug = slugify(sub.name);
@@ -55,43 +60,29 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
         if (typeof mainModulePerms === 'object') {
             // @ts-ignore
             const subPerms = mainModulePerms[submoduleSlug];
-            // Check for read access specifically
             return subPerms?.read;
         }
         return false;
     });
   }, [dynamicSubmodules, permissions]);
 
-  const groupedSubmodules = filteredSubmodules
-    ? groupSubmodules(filteredSubmodules)
-    : null;
-    
-  const mainModuleOrder = [
-    'Transactions',
-    'Sales',
-    'Inventory',
-    'Purchase',
-    'CRM',
-    'Reports',
-    'User Management',
-  ];
-
-  const sortedMainModules = groupedSubmodules ? Object.keys(groupedSubmodules).sort((a, b) => {
-    const indexA = mainModuleOrder.indexOf(a);
-    const indexB = mainModuleOrder.indexOf(b);
-    if (indexA === -1 && indexB === -1) return a.localeCompare(b); // both not in order list
-    if (indexA === -1) return 1; // a is not in order list, push to end
-    if (indexB === -1) return -1; // b is not in order list, push to end
-    return indexA - indexB;
-  }) : [];
-  
-  if (isLoading || !groupedSubmodules) {
+  if (isLoading) {
       return (
           <div className="flex items-center justify-center h-48">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
       )
   }
+
+  const groupedSubmodules = groupSubmodules(filteredSubmodules);
+  const sortedMainModules = Object.keys(groupedSubmodules).sort((a, b) => {
+    const indexA = mainModuleOrder.indexOf(a);
+    const indexB = mainModuleOrder.indexOf(b);
+    if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
 
   return (
     <div className="space-y-6">
@@ -102,7 +93,7 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
               {mainModule}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {groupedSubmodules![mainModule].map((submodule) => (
+              {groupedSubmodules[mainModule].map((submodule) => (
                 <SubmoduleCard key={submodule.id} submodule={submodule} />
               ))}
             </div>
