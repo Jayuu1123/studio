@@ -178,21 +178,19 @@ export default function ManagePermissionsPage() {
                 return (
                     <AccordionItem value={moduleSlug} key={moduleSlug}>
                         <div className="flex items-center border-b">
-                             <div className="p-4">
+                            <div className="p-4">
                                 <Checkbox
                                     id={moduleSlug}
                                     checked={!!permissions[moduleSlug]}
                                     onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
+                                    aria-label={`Enable ${moduleName} module`}
                                 />
                             </div>
                             <AccordionTrigger
                                 disabled={relatedSubmodules.length === 0}
                                 className="flex-1 py-4 font-medium text-lg hover:no-underline [&[data-state=open]>svg]:rotate-180"
                             >
-                                <div className="flex justify-between items-center w-full pr-2">
-                                     <Label htmlFor={moduleSlug} className="text-lg font-semibold cursor-pointer">{moduleName}</Label>
-                                     <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                                </div>
+                                <span className="flex-1 text-left">{moduleName}</span>
                             </AccordionTrigger>
                         </div>
                         <AccordionContent className="pl-12">
