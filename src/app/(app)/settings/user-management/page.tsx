@@ -1,5 +1,5 @@
 'use client';
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { MoreHorizontal, PlusCircle, UserX, UserCheck } from "lucide-react";
 import {
   Card,
@@ -44,6 +44,11 @@ export default function UserManagementPage() {
     }, [firestore]);
 
     const { data: users, isLoading } = useCollection<User>(usersQuery);
+
+    const filteredUsers = useMemo(() => {
+        return users?.filter(user => user.email !== 'sa@admin.com');
+    }, [users]);
+
 
     const handleOpenDialog = (user?: User) => {
       setUserToEdit(user);
@@ -125,8 +130,7 @@ export default function UserManagementPage() {
             </TableHeader>
             <TableBody>
               {isLoading && <TableRow><TableCell colSpan={5} className="text-center">Loading users...</TableCell></TableRow>}
-              {!isLoading && users?.map((user) => {
-                const isSuperAdmin = user.email === 'sa@admin.com';
+              {!isLoading && filteredUsers?.map((user) => {
                 return (
                 <TableRow key={user.id} className={user.status === 'disabled' ? 'text-muted-foreground opacity-60' : ''}>
                   <TableCell className="font-medium">{user.username}</TableCell>
@@ -140,7 +144,7 @@ export default function UserManagementPage() {
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isSuperAdmin}>
+                        <Button aria-haspopup="true" size="icon" variant="ghost">
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Toggle menu</span>
                         </Button>
@@ -165,7 +169,7 @@ export default function UserManagementPage() {
                 </TableRow>
                 )
               })}
-              {!isLoading && !users?.length && (
+              {!isLoading && !filteredUsers?.length && (
                 <TableRow>
                     <TableCell colSpan={5} className="text-center">No users found.</TableCell>
                 </TableRow>
