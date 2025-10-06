@@ -28,6 +28,7 @@ export function UserNav() {
   const handleLogout = async () => {
     if (auth) {
         await signOut(auth);
+        sessionStorage.removeItem('userSessionId');
         router.push('/');
     }
   }
