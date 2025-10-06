@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo } from 'react';
@@ -39,6 +38,8 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
 
   const filteredSubmodules = useMemo(() => {
     if (!dynamicSubmodules || !permissions) return [];
+    // If permissions object is empty, it might still be loading, so we wait.
+    if (Object.keys(permissions).length === 0) return []; 
     if (permissions.all) return dynamicSubmodules;
     
     return dynamicSubmodules.filter(sub => {
@@ -83,7 +84,7 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     <div className="space-y-6">
       {isLoading && <p>Loading custom modules...</p>}
 
-      {!isLoading &&
+      {!isLoading && sortedMainModules.length > 0 &&
         sortedMainModules.map((mainModule) => (
           <div key={mainModule}>
             <h2 className="text-xl font-semibold mb-3 text-muted-foreground">
