@@ -1070,7 +1070,7 @@
     ]
   },
   "firestore": {
-    "rules": "rules_version = '2';\n\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if request.auth != null;\n    }\n  }\n}",
+    "rules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    function isSuperAdmin() {\n      return request.auth.token.email == 'sa@admin.com';\n    }\n    match /{document=**} {\n      allow read, write: if isSuperAdmin() || request.auth != null;\n    }\n  }\n}",
     "structure": [
       {
         "path": "/users/{userId}",
@@ -1515,5 +1515,7 @@
     
 
   
+
+    
 
     
