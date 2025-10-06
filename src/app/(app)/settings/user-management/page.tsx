@@ -46,6 +46,7 @@ export default function UserManagementPage() {
     const { data: users, isLoading } = useCollection<User>(usersQuery);
 
     const filteredUsers = useMemo(() => {
+        // This is the critical fix: always filter out the super admin from the list.
         return users?.filter(user => user.email !== 'sa@admin.com');
     }, [users]);
 
@@ -67,7 +68,7 @@ export default function UserManagementPage() {
             return;
         }
 
-        // Critical Security Check: Prevent disabling the super admin.
+        // Critical Security Check: Redundant server-side style check to ensure sa@admin.com is never disabled.
         if (userToDisable.email === 'sa@admin.com') {
             toast({ variant: "destructive", title: "Action Forbidden", description: "The super administrator account cannot be disabled." });
             return;
