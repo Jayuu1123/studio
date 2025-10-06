@@ -21,10 +21,10 @@ import Link from 'next/link';
 import { slugify } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
-const ALL_MODULES = [
-  'Dashboard', 'Transactions', 'Sales', 'Inventory', 'Purchase', 'CRM', 
-  'Reports', 'Form Setting', 'Settings', 'User Management', 'Roles & Permissions', 'Licensing'
+const STATIC_MODULES = [
+  'Dashboard', 'Settings', 'User Management', 'Roles & Permissions', 'Licensing', 'Form Setting'
 ];
+
 
 export default function ManagePermissionsPage() {
   const params = useParams();
@@ -121,15 +121,21 @@ export default function ManagePermissionsPage() {
       return !!permissions[mainModuleSlug]?.[submoduleSlug]?.[action];
   }
   
-  const groupedSubmodules = useMemo(() => {
-    if (!submodules) return {};
-    return submodules.reduce((acc, sub) => {
+  const { allModules, groupedSubmodules } = useMemo(() => {
+    if (!submodules) return { allModules: STATIC_MODULES, groupedSubmodules: {} };
+    
+    const dynamicModules = new Set(submodules.map(sub => sub.mainModule));
+    const allModuleNames = Array.from(new Set([...STATIC_MODULES, ...dynamicModules]));
+
+    const grouped = submodules.reduce((acc, sub) => {
         if (!acc[sub.mainModule]) {
             acc[sub.mainModule] = [];
         }
         acc[sub.mainModule].push(sub);
         return acc;
     }, {} as {[key: string]: AppSubmodule[]});
+
+    return { allModules: allModuleNames, groupedSubmodules: grouped };
   }, [submodules]);
 
   if (isLoadingRole || isLoadingSubmodules) {
@@ -161,7 +167,7 @@ export default function ManagePermissionsPage() {
         </CardHeader>
         <CardContent>
           <Accordion type="multiple" className="w-full">
-            {ALL_MODULES.map((moduleName) => {
+            {allModules.map((moduleName) => {
                 const moduleSlug = slugify(moduleName);
                 const relatedSubmodules = groupedSubmodules[moduleName] || [];
                 
