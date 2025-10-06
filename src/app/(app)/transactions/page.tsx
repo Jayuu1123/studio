@@ -8,6 +8,7 @@ import type { AppSubmodule, PermissionSet } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { slugify } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 
 // Helper function to group submodules by their mainModule
 const groupSubmodules = (submodules: AppSubmodule[]) => {
@@ -37,9 +38,12 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     useCollection<AppSubmodule>(submodulesQuery);
 
   const filteredSubmodules = useMemo(() => {
-    if (!dynamicSubmodules || !permissions) return [];
-    // If permissions object is empty, it might still be loading, so we wait.
-    if (Object.keys(permissions).length === 0) return []; 
+    if (!dynamicSubmodules || !permissions) return null;
+    
+    // If permissions object is empty, it means they are still loading from the parent layout.
+    // Return null to indicate a loading state, rather than an empty list.
+    if (Object.keys(permissions).length === 0) return null;
+    
     if (permissions.all) return dynamicSubmodules;
     
     return dynamicSubmodules.filter(sub => {
@@ -50,8 +54,8 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
         if (mainModulePerms === true) return true;
 
         if (typeof mainModulePerms === 'object') {
-            const subPerms = mainModulePerms[submoduleSlug];
             // @ts-ignore
+            const subPerms = mainModulePerms[submoduleSlug];
             return subPerms?.read;
         }
         return false;
@@ -60,7 +64,8 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
 
   const groupedSubmodules = filteredSubmodules
     ? groupSubmodules(filteredSubmodules)
-    : {};
+    : null;
+    
   const mainModuleOrder = [
     'Transactions',
     'Sales',
@@ -71,34 +76,38 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     'User Management',
   ];
 
-  const sortedMainModules = Object.keys(groupedSubmodules).sort((a, b) => {
+  const sortedMainModules = groupedSubmodules ? Object.keys(groupedSubmodules).sort((a, b) => {
     const indexA = mainModuleOrder.indexOf(a);
     const indexB = mainModuleOrder.indexOf(b);
     if (indexA === -1 && indexB === -1) return a.localeCompare(b); // both not in order list
     if (indexA === -1) return 1; // a is not in order list, push to end
     if (indexB === -1) return -1; // b is not in order list, push to end
     return indexA - indexB;
-  });
+  }) : [];
+  
+  if (isLoading || !filteredSubmodules) {
+      return (
+          <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+      )
+  }
 
   return (
     <div className="space-y-6">
-      {isLoading && <p>Loading custom modules...</p>}
-
-      {!isLoading && sortedMainModules.length > 0 &&
+      {sortedMainModules.length > 0 ?
         sortedMainModules.map((mainModule) => (
           <div key={mainModule}>
             <h2 className="text-xl font-semibold mb-3 text-muted-foreground">
               {mainModule}
             </h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {groupedSubmodules[mainModule].map((submodule) => (
+              {groupedSubmodules![mainModule].map((submodule) => (
                 <SubmoduleCard key={submodule.id} submodule={submodule} />
               ))}
             </div>
           </div>
-        ))}
-      {!isLoading &&
-        (!filteredSubmodules || filteredSubmodules.length === 0) && (
+        )) : (
           <Card>
             <CardHeader>
               <CardTitle>No Accessible Submodules Found</CardTitle>

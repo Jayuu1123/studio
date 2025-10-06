@@ -196,30 +196,26 @@ export default function AppLayout({
 
     useEffect(() => {
         const fetchPermissions = async () => {
+            // Wait until both user and user data are loaded
             if (isUserLoading || isUserDataLoading) {
               return;
             }
-
-            if (user?.email === 'sa@admin.com') {
-                setPermissions({ all: true });
-                setIsLoadingPermissions(false);
-                return;
-            }
             
+            // If there's no user data at all (e.g., anonymous user), set empty permissions and finish.
             if (!userData) {
                 setPermissions({});
                 setIsLoadingPermissions(false);
                 return;
             }
-            
-            const roles = userData.roles || [];
-            
-            if (roles.includes('admin')) {
+
+            // If the user's role includes 'admin', grant all permissions and finish.
+            if (userData.roles?.includes('admin')) {
                 setPermissions({ all: true });
                 setIsLoadingPermissions(false);
                 return;
             }
             
+            const roles = userData.roles || [];
             if (roles.length === 0) {
                 setPermissions({});
                 setIsLoadingPermissions(false);
@@ -228,6 +224,7 @@ export default function AppLayout({
 
             let combinedPermissions: PermissionSet = {};
             try {
+                // Fetch all roles at once
                 const roleQuery = query(collection(firestore!, 'roles'), where('name', 'in', roles));
                 const roleSnapshots = await getDocs(roleQuery);
                 
@@ -250,7 +247,7 @@ export default function AppLayout({
                 setPermissions(combinedPermissions);
             } catch (error) {
                 console.error("Error fetching permissions:", error);
-                setPermissions({});
+                setPermissions({}); // Set empty on error
             } finally {
                 setIsLoadingPermissions(false);
             }
@@ -260,7 +257,7 @@ export default function AppLayout({
     }, [firestore, user, userData, isUserLoading, isUserDataLoading]);
 
 
-  if (isUserLoading || isLoadingPermissions || isLicensed === null) {
+  if (isUserLoading || isLoadingPermissions || isLicensed === null || isUserDataLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -298,5 +295,3 @@ export default function AppLayout({
         </div>
   );
 }
-
-
