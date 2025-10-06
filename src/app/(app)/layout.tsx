@@ -92,7 +92,7 @@ export default function AppLayout({
     );
   }, [firestore, user]);
 
-  const { data: activeLicenses } = useCollection<License>(activeLicenseQuery);
+  const { data: activeLicenses, isLoading: isLoadingLicenses } = useCollection<License>(activeLicenseQuery);
 
   const permissions: PermissionSet = useMemo(() => {
     if (!userData) return {};
@@ -106,7 +106,7 @@ export default function AppLayout({
 
 
   useEffect(() => {
-    if (isUserLoading) return;
+    if (isLoadingLicenses) return;
 
     if (activeLicenses) {
         const now = Timestamp.now();
@@ -119,7 +119,7 @@ export default function AppLayout({
     } else {
         setIsLicensed(null);
     }
-  }, [activeLicenses, isUserLoading, user]);
+  }, [activeLicenses, isLoadingLicenses, isUserLoading, user]);
 
    useEffect(() => {
         if (userData?.status === 'disabled') {
@@ -201,7 +201,7 @@ export default function AppLayout({
     }
   }, [auth, user, isUserLoading]);
 
-  // The main loading gate. Do not render children until we know who the user is and have their data.
+  // The main loading gate. Do not render children until we know who the user is, have their data, and license status.
   if (isUserLoading || (user && isUserDataLoading) || isLicensed === null) {
     return (
       <div className="flex items-center justify-center min-h-screen">
