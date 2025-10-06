@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/tooltip';
 import { cn, slugify } from '@/lib/utils';
 import type { PermissionSet } from '@/lib/types';
+import { useUser } from '@/firebase';
 
 
 const navItems = [
@@ -42,8 +43,12 @@ const navItems = [
 
 export function Nav({ isLicensed, permissions }: { isLicensed: boolean | null, permissions: PermissionSet }) {
   const pathname = usePathname();
+  const { user } = useUser();
   
   const hasAccess = (label: string) => {
+    // Hardcoded override for the super admin. This is a failsafe.
+    if (user?.email === 'sa@admin.com') return true;
+
     if (permissions.all) return true;
     const permission = permissions[slugify(label)];
     // Grant access if the permission is explicitly true or if it's an object (implying granular sub-permissions).
