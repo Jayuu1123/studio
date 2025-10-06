@@ -38,14 +38,13 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     useCollection<AppSubmodule>(submodulesQuery);
 
   const filteredSubmodules = useMemo(() => {
-    if (!dynamicSubmodules || !permissions) return null;
+    // Wait until we have both submodules and permissions
+    if (!dynamicSubmodules || !permissions || Object.keys(permissions).length === 0) return null;
     
-    // If permissions object is empty, it means they are still loading from the parent layout.
-    // Return null to indicate a loading state, rather than an empty list.
-    if (Object.keys(permissions).length === 0) return null;
-    
+    // If user is admin, show everything
     if (permissions.all) return dynamicSubmodules;
     
+    // Otherwise, filter based on permissions
     return dynamicSubmodules.filter(sub => {
         const mainModuleSlug = slugify(sub.mainModule);
         const submoduleSlug = slugify(sub.name);
@@ -56,6 +55,7 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
         if (typeof mainModulePerms === 'object') {
             // @ts-ignore
             const subPerms = mainModulePerms[submoduleSlug];
+            // Check for read access specifically
             return subPerms?.read;
         }
         return false;
@@ -85,7 +85,7 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     return indexA - indexB;
   }) : [];
   
-  if (isLoading || !filteredSubmodules) {
+  if (isLoading || !groupedSubmodules) {
       return (
           <div className="flex items-center justify-center h-48">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
