@@ -133,16 +133,16 @@ export default function UserManagementPage() {
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isSuperAdmin}>
+                        <Button aria-haspopup="true" size="icon" variant="ghost">
                           <MoreHorizontal className="h-4 w-4" />
                           <span className="sr-only">Toggle menu</span>
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleOpenDialog(user)} disabled={user.status === 'disabled'}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleOpenDialog(user)} disabled={user.status === 'disabled' || isSuperAdmin}>Edit</DropdownMenuItem>
                          {user.status === 'active' ? (
-                          <DropdownMenuItem onClick={() => user.id && handleDisableUser(user.id)} className="text-red-500">
+                          <DropdownMenuItem onClick={() => user.id && handleDisableUser(user.id)} className="text-red-500" disabled={isSuperAdmin}>
                             <UserX className="mr-2 h-4 w-4" />
                             Disable
                           </DropdownMenuItem>
