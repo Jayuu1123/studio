@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo } from 'react';
@@ -32,7 +33,7 @@ const mainModuleOrder = [
 ];
 
 interface TransactionsPageProps {
-  permissions: PermissionSet;
+  permissions?: PermissionSet;
 }
 
 export default function TransactionsPage({ permissions }: TransactionsPageProps) {
@@ -46,9 +47,8 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
   const { data: dynamicSubmodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
 
   const filteredSubmodules = useMemo(() => {
-    if (!dynamicSubmodules) return [];
+    if (!dynamicSubmodules || !permissions) return [];
     if (permissions.all) return dynamicSubmodules;
-    if (!permissions || Object.keys(permissions).length === 0) return [];
     
     return dynamicSubmodules.filter(sub => {
         const mainModuleSlug = slugify(sub.mainModule);
@@ -113,3 +113,4 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
     </div>
   );
 }
+
