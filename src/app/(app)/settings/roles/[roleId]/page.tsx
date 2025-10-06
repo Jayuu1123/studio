@@ -16,7 +16,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { slugify } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -80,12 +80,10 @@ export default function ManagePermissionsPage() {
       setPermissions(prev => {
           const newPerms = JSON.parse(JSON.stringify(prev));
 
-          // Ensure main module entry exists and is an object
           if (typeof newPerms[mainModuleSlug] !== 'object' || newPerms[mainModuleSlug] === true) {
               newPerms[mainModuleSlug] = {};
           }
           
-          // Ensure submodule entry exists and is an object
           if (typeof newPerms[mainModuleSlug][submoduleSlug] !== 'object') {
               newPerms[mainModuleSlug][submoduleSlug] = {};
           }
@@ -94,15 +92,8 @@ export default function ManagePermissionsPage() {
             newPerms[mainModuleSlug][submoduleSlug][action] = true;
           } else {
             delete newPerms[mainModuleSlug][submoduleSlug][action];
-            // Clean up empty objects
             if (Object.keys(newPerms[mainModuleSlug][submoduleSlug]).length === 0) {
               delete newPerms[mainModuleSlug][submoduleSlug];
-            }
-             if (Object.keys(newPerms[mainModuleSlug]).length === 0) {
-              // If we just removed the last submodule permission, we shouldn't delete the main module key
-              // if the main module checkbox is still checked. We'll handle this by setting it to `true`
-              // if it's empty, but only if the main checkbox is intended to be checked.
-              // For now, just clean up sub-objects.
             }
           }
 
@@ -131,22 +122,24 @@ export default function ManagePermissionsPage() {
   };
   
   const getSubmodulePermission = (mainModuleSlug: string, submoduleSlug: string, action: 'read' | 'write' | 'delete') => {
-      // @ts-ignore
-      return !!permissions[mainModuleSlug]?.[submoduleSlug]?.[action];
+      const mainModulePerms = permissions[mainModuleSlug];
+      if (typeof mainModulePerms === 'object' && mainModulePerms !== null) {
+          // @ts-ignore
+          return !!mainModulePerms[submoduleSlug]?.[action];
+      }
+      return false;
   }
   
   const groupedSubmodules = useMemo(() => {
     if (!submodules) return {};
     
-    const grouped = submodules.reduce((acc, sub) => {
+    return submodules.reduce((acc, sub) => {
         if (!acc[sub.mainModule]) {
             acc[sub.mainModule] = [];
         }
         acc[sub.mainModule].push(sub);
         return acc;
     }, {} as {[key: string]: AppSubmodule[]});
-
-    return grouped;
   }, [submodules]);
 
   if (isLoadingRole || isLoadingSubmodules) {
@@ -184,20 +177,27 @@ export default function ManagePermissionsPage() {
                 
                 return (
                     <AccordionItem value={moduleSlug} key={moduleSlug}>
-                        <div className="flex items-center w-full py-4">
-                            <div className="flex items-center gap-4 flex-grow">
+                        <div className="flex items-center border-b">
+                             <div className="p-4">
                                 <Checkbox
                                     id={moduleSlug}
                                     checked={!!permissions[moduleSlug]}
                                     onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
                                 />
-                                <Label htmlFor={moduleSlug} className="text-lg font-semibold cursor-pointer">{moduleName}</Label>
                             </div>
-                            <AccordionTrigger disabled={relatedSubmodules.length === 0} className="w-auto p-2 hover:no-underline" />
+                            <AccordionTrigger
+                                disabled={relatedSubmodules.length === 0}
+                                className="flex-1 py-4 font-medium text-lg hover:no-underline [&[data-state=open]>svg]:rotate-180"
+                            >
+                                <div className="flex justify-between items-center w-full pr-2">
+                                     <Label htmlFor={moduleSlug} className="text-lg font-semibold cursor-pointer">{moduleName}</Label>
+                                     <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                                </div>
+                            </AccordionTrigger>
                         </div>
                         <AccordionContent className="pl-12">
                             {relatedSubmodules.length > 0 ? (
-                                <div className="space-y-4">
+                                <div className="space-y-4 pt-4">
                                     {relatedSubmodules.map(sub => {
                                         const subSlug = slugify(sub.name);
                                         return (
@@ -234,7 +234,7 @@ export default function ManagePermissionsPage() {
                                     })}
                                 </div>
                             ) : (
-                                <p className="text-sm text-muted-foreground">No user-defined submodules. Access is granted to the main module.</p>
+                                <p className="text-sm text-muted-foreground pt-4">No user-defined submodules. Access is granted to the main module.</p>
                             )}
                         </AccordionContent>
                     </AccordionItem>
