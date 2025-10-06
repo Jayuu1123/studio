@@ -21,8 +21,19 @@ import Link from 'next/link';
 import { slugify } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
-const STATIC_MODULES = [
-  'Dashboard', 'Settings', 'User Management', 'Roles & Permissions', 'Licensing', 'Form Setting'
+const ALL_MAIN_MODULES = [
+  'Dashboard', 
+  'Transactions',
+  'Sales',
+  'Inventory',
+  'Purchase',
+  'CRM',
+  'Reports',
+  'Form Setting',
+  'Settings', 
+  'User Management', 
+  'Roles & Permissions', 
+  'Licensing'
 ];
 
 
@@ -121,12 +132,9 @@ export default function ManagePermissionsPage() {
       return !!permissions[mainModuleSlug]?.[submoduleSlug]?.[action];
   }
   
-  const { allModules, groupedSubmodules } = useMemo(() => {
-    if (!submodules) return { allModules: STATIC_MODULES, groupedSubmodules: {} };
+  const groupedSubmodules = useMemo(() => {
+    if (!submodules) return {};
     
-    const dynamicModules = new Set(submodules.map(sub => sub.mainModule));
-    const allModuleNames = Array.from(new Set([...STATIC_MODULES, ...dynamicModules]));
-
     const grouped = submodules.reduce((acc, sub) => {
         if (!acc[sub.mainModule]) {
             acc[sub.mainModule] = [];
@@ -135,7 +143,7 @@ export default function ManagePermissionsPage() {
         return acc;
     }, {} as {[key: string]: AppSubmodule[]});
 
-    return { allModules: allModuleNames, groupedSubmodules: grouped };
+    return grouped;
   }, [submodules]);
 
   if (isLoadingRole || isLoadingSubmodules) {
@@ -167,7 +175,7 @@ export default function ManagePermissionsPage() {
         </CardHeader>
         <CardContent>
           <Accordion type="multiple" className="w-full">
-            {allModules.map((moduleName) => {
+            {ALL_MAIN_MODULES.map((moduleName) => {
                 const moduleSlug = slugify(moduleName);
                 const relatedSubmodules = groupedSubmodules[moduleName] || [];
                 
@@ -179,7 +187,7 @@ export default function ManagePermissionsPage() {
                                 checked={!!permissions[moduleSlug]}
                                 onCheckedChange={(checked) => handleModulePermissionChange(moduleSlug, !!checked)}
                             />
-                            <AccordionTrigger className="p-0 flex-1">
+                            <AccordionTrigger className="p-0 flex-1" disabled={relatedSubmodules.length === 0}>
                                 <Label htmlFor={moduleSlug} className="text-lg font-semibold cursor-pointer">{moduleName}</Label>
                             </AccordionTrigger>
                         </div>
@@ -222,7 +230,7 @@ export default function ManagePermissionsPage() {
                                     })}
                                 </div>
                             ) : (
-                                <p className="text-sm text-muted-foreground">No submodules defined.</p>
+                                <p className="text-sm text-muted-foreground">No user-defined submodules. Access is granted to the main module.</p>
                             )}
                         </AccordionContent>
                     </AccordionItem>
