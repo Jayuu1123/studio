@@ -77,7 +77,7 @@ export default function AppLayout({
   const router = useRouter();
   const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
-  const [permissions, setPermissions] = useState<PermissionSet>({});
+  const [permissions, setPermissions] = useState<PermissionSet | null>(null);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
 
   const userDocRef = useMemoFirebase(() => {
@@ -106,10 +106,13 @@ export default function AppLayout({
             license.expiryDate && license.expiryDate.seconds > now.seconds
         );
         setIsLicensed(hasValidLicense);
+    } else if (!isUserLoading && user) {
+        // If user is loaded but licenses aren't, they might have none.
+        setIsLicensed(false);
     } else {
-        setIsLicensed(null); // Still loading or no licenses found
+        setIsLicensed(null); // Still loading or no user
     }
-  }, [activeLicenses, isUserLoading]);
+  }, [activeLicenses, isUserLoading, user]);
 
    useEffect(() => {
         if (userData?.status === 'disabled') {
@@ -196,21 +199,21 @@ export default function AppLayout({
 
     useEffect(() => {
         const fetchPermissions = async () => {
-            // Wait until both user and user data are loaded
+            // Only proceed if user and user data loading is complete.
             if (isUserLoading || isUserDataLoading) {
               return;
             }
-            
-            // If there's no user data at all (e.g., anonymous user), set empty permissions and finish.
-            if (!userData) {
-                setPermissions({});
+
+            // Immediately grant full access if the user is the super admin.
+            if (userData?.email === 'sa@admin.com') {
+                setPermissions({ all: true });
                 setIsLoadingPermissions(false);
                 return;
             }
-
-            // If the user's role includes 'admin', grant all permissions and finish.
-            if (userData.roles?.includes('admin')) {
-                setPermissions({ all: true });
+            
+            // If there's no user data (e.g., anonymous user or new user), set empty permissions.
+            if (!userData) {
+                setPermissions({});
                 setIsLoadingPermissions(false);
                 return;
             }
@@ -254,10 +257,10 @@ export default function AppLayout({
         };
 
         fetchPermissions();
-    }, [firestore, user, userData, isUserLoading, isUserDataLoading]);
+    }, [firestore, userData, isUserLoading, isUserDataLoading]);
 
 
-  if (isUserLoading || isLoadingPermissions || isLicensed === null || isUserDataLoading) {
+  if (isUserLoading || isLoadingPermissions || isUserDataLoading || isLicensed === null || !permissions) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
