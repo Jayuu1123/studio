@@ -45,7 +45,9 @@ export function Nav({ isLicensed, permissions }: { isLicensed: boolean | null, p
   
   const hasAccess = (label: string) => {
     if (permissions.all) return true;
-    return permissions[slugify(label)];
+    const permission = permissions[slugify(label)];
+    // Grant access if the permission is explicitly true or if it's an object (implying granular sub-permissions).
+    return permission === true || (typeof permission === 'object' && permission !== null);
   }
 
   return (
