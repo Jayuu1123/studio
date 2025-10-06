@@ -46,6 +46,8 @@ export default function TransactionsPage({ permissions }: TransactionsPageProps)
         const submoduleSlug = slugify(sub.name);
         const mainModulePerms = permissions[mainModuleSlug];
         
+        if (mainModulePerms === true) return true;
+
         if (typeof mainModulePerms === 'object') {
             const subPerms = mainModulePerms[submoduleSlug];
             // @ts-ignore

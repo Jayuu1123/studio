@@ -196,26 +196,23 @@ export default function AppLayout({
 
     useEffect(() => {
     const fetchPermissions = async () => {
-      // Don't fetch until we know who the user is and have their data.
-      if (isUserLoading || !userData) {
-          setIsLoadingPermissions(true);
-          return;
+      if (isUserLoading || !userData || !firestore) {
+        setIsLoadingPermissions(true);
+        return;
       }
       
-      const roles = userData.roles;
+      const roles = userData.roles || [];
       
-      // If user has no roles or is anonymous, they have no permissions.
-      if (!roles || roles.length === 0) {
-          setPermissions({});
-          setIsLoadingPermissions(false);
-          return;
-      }
-
-      // Handle special case for 'admin' role with all access.
       if (roles.includes('admin')) {
-          setPermissions({ all: true });
-          setIsLoadingPermissions(false);
-          return;
+        setPermissions({ all: true });
+        setIsLoadingPermissions(false);
+        return;
+      }
+      
+      if (roles.length === 0) {
+        setPermissions({});
+        setIsLoadingPermissions(false);
+        return;
       }
 
       let combinedPermissions: PermissionSet = {};
@@ -226,7 +223,6 @@ export default function AppLayout({
         roleSnapshots.forEach(doc => {
             const roleData = doc.data() as Role;
             if(roleData.permissions) {
-                // Merge permissions
                 for (const key in roleData.permissions) {
                     const existingPerm = combinedPermissions[key];
                     const newPerm = roleData.permissions[key];
@@ -251,7 +247,7 @@ export default function AppLayout({
     fetchPermissions();
   }, [firestore, userData, isUserLoading]);
 
-  if (isUserLoading || isLoadingPermissions) {
+  if (isUserLoading || isLoadingPermissions || isLicensed === null) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
