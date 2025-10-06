@@ -1,5 +1,4 @@
 
-
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Nav } from '@/components/nav';
@@ -77,9 +76,7 @@ export default function AppLayout({
   const router = useRouter();
   const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
-  const [permissions, setPermissions] = useState<PermissionSet | null>(null);
-  const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
-
+  
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'users', user.uid);
@@ -97,8 +94,19 @@ export default function AppLayout({
 
   const { data: activeLicenses } = useCollection<License>(activeLicenseQuery);
 
+  const permissions: PermissionSet = useMemo(() => {
+    if (!userData) return {};
+    if (userData.email === 'sa@admin.com') return { all: true };
+    // Basic permissions from roles - a full implementation would merge these from a roles collection
+    if (userData.roles?.includes('admin')) return { all: true };
+    
+    // Default to an empty set if no specific logic matches
+    return {};
+  }, [userData]);
+
+
   useEffect(() => {
-    if (isUserLoading) return; // Wait until we know who the user is
+    if (isUserLoading) return;
 
     if (activeLicenses) {
         const now = Timestamp.now();
@@ -107,10 +115,9 @@ export default function AppLayout({
         );
         setIsLicensed(hasValidLicense);
     } else if (!isUserLoading && user) {
-        // If user is loaded but licenses aren't, they might have none.
         setIsLicensed(false);
     } else {
-        setIsLicensed(null); // Still loading or no user
+        setIsLicensed(null);
     }
   }, [activeLicenses, isUserLoading, user]);
 
@@ -122,7 +129,6 @@ export default function AppLayout({
                     title: 'Account Disabled',
                     description: 'Your account has been disabled. Logging you out.',
                 });
-                // The wall will be displayed, and the user can log out from there.
             }
         }
         
@@ -151,17 +157,15 @@ export default function AppLayout({
         const adminPassword = 'saadmin';
         
         try {
-            // Ensure admin role exists
             const adminRoleRef = doc(firestore, 'roles', 'admin');
             const adminRoleSnap = await getDoc(adminRoleRef);
             if (!adminRoleSnap.exists()) {
                 await setDoc(adminRoleRef, {
                     name: 'Admin',
                     description: 'Super administrator with all permissions.',
-                    permissions: { all: true } // Special flag for all access
+                    permissions: { all: true }
                 });
             }
-
 
             const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
             const adminUID = userCredential.user.uid;
@@ -197,70 +201,8 @@ export default function AppLayout({
     }
   }, [auth, user, isUserLoading]);
 
-    useEffect(() => {
-        const fetchPermissions = async () => {
-            // Only proceed if user and user data loading is complete.
-            if (isUserLoading || isUserDataLoading) {
-              return;
-            }
-
-            // Immediately grant full access if the user is the super admin.
-            if (userData?.email === 'sa@admin.com') {
-                setPermissions({ all: true });
-                setIsLoadingPermissions(false);
-                return;
-            }
-            
-            // If there's no user data (e.g., anonymous user or new user), set empty permissions.
-            if (!userData) {
-                setPermissions({});
-                setIsLoadingPermissions(false);
-                return;
-            }
-            
-            const roles = userData.roles || [];
-            if (roles.length === 0) {
-                setPermissions({});
-                setIsLoadingPermissions(false);
-                return;
-            }
-
-            let combinedPermissions: PermissionSet = {};
-            try {
-                // Fetch all roles at once
-                const roleQuery = query(collection(firestore!, 'roles'), where('name', 'in', roles));
-                const roleSnapshots = await getDocs(roleQuery);
-                
-                roleSnapshots.forEach(doc => {
-                    const roleData = doc.data() as Role;
-                    if(roleData.permissions) {
-                        // Deep merge permissions
-                        for (const key in roleData.permissions) {
-                            const existingPerm = combinedPermissions[key];
-                            const newPerm = roleData.permissions[key];
-
-                            if (typeof existingPerm === 'object' && typeof newPerm === 'object' && !Array.isArray(existingPerm) && !Array.isArray(newPerm)) {
-                                combinedPermissions[key] = { ...existingPerm, ...newPerm };
-                            } else {
-                                combinedPermissions[key] = newPerm;
-                            }
-                        }
-                    }
-                });
-                setPermissions(combinedPermissions);
-            } catch (error) {
-                console.error("Error fetching permissions:", error);
-                setPermissions({}); // Set empty on error
-            } finally {
-                setIsLoadingPermissions(false);
-            }
-        };
-
-        fetchPermissions();
-    }, [firestore, userData, isUserLoading, isUserDataLoading]);
-
-
-  if (isUserLoading || isLoadingPermissions || isUserDataLoading || isLicensed === null || !permissions) {
+  // The main loading gate. Do not render children until we know who the user is and have their data.
+  if (isUserLoading || (user && isUserDataLoading) || isLicensed === null) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
