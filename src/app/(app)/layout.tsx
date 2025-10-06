@@ -196,57 +196,56 @@ export default function AppLayout({
 
     useEffect(() => {
     const fetchPermissions = async () => {
-        if (isUserLoading) return; // Don't fetch until we know who the user is
+      // Don't fetch until we know who the user is and have their data.
+      if (isUserLoading || !userData) {
+          setIsLoadingPermissions(true);
+          return;
+      }
+      
+      const roles = userData.roles;
+      
+      // If user has no roles or is anonymous, they have no permissions.
+      if (!roles || roles.length === 0) {
+          setPermissions({});
+          setIsLoadingPermissions(false);
+          return;
+      }
 
-        if (!firestore || !userData || !userData.roles || userData.roles.length === 0) {
-            setIsLoadingPermissions(false);
-            setPermissions({}); // Default to no permissions
-            return;
-        }
+      // Handle special case for 'admin' role with all access.
+      if (roles.includes('admin')) {
+          setPermissions({ all: true });
+          setIsLoadingPermissions(false);
+          return;
+      }
 
-        setIsLoadingPermissions(true);
-        const roles = userData.roles;
-        let combinedPermissions: PermissionSet = {};
+      let combinedPermissions: PermissionSet = {};
+      try {
+        const roleQuery = query(collection(firestore, 'roles'), where('name', 'in', roles));
+        const roleSnapshots = await getDocs(roleQuery);
+        
+        roleSnapshots.forEach(doc => {
+            const roleData = doc.data() as Role;
+            if(roleData.permissions) {
+                // Merge permissions
+                for (const key in roleData.permissions) {
+                    const existingPerm = combinedPermissions[key];
+                    const newPerm = roleData.permissions[key];
 
-        try {
-            const roleQuery = query(collection(firestore, 'roles'), where('name', 'in', roles));
-            const roleSnapshots = await getDocs(roleQuery);
-            
-            roleSnapshots.forEach(doc => {
-                const roleData = doc.data() as Role;
-                if(roleData.permissions) {
-                    // Special case for admin with all access
-                    if (roleData.permissions.all === true) {
-                        combinedPermissions = { all: true };
-                        return; // Exit early
-                    }
-
-                    // Merge permissions
-                    for (const key in roleData.permissions) {
-                        const existingPerm = combinedPermissions[key];
-                        const newPerm = roleData.permissions[key];
-
-                        if (typeof existingPerm === 'object' && typeof newPerm === 'object') {
-                             combinedPermissions[key] = { ...existingPerm, ...newPerm };
-                        } else {
-                             combinedPermissions[key] = newPerm;
-                        }
+                    if (typeof existingPerm === 'object' && typeof newPerm === 'object') {
+                         combinedPermissions[key] = { ...existingPerm, ...newPerm };
+                    } else {
+                         combinedPermissions[key] = newPerm;
                     }
                 }
-            });
-             // Exit loop if admin role found
-            if (combinedPermissions.all) {
-                 setPermissions(combinedPermissions);
-                 setIsLoadingPermissions(false);
-                 return;
             }
-
-        } catch (error) {
-            console.error("Error fetching permissions:", error);
-        } finally {
-            setPermissions(combinedPermissions);
-            setIsLoadingPermissions(false);
-        }
+        });
+        setPermissions(combinedPermissions);
+      } catch (error) {
+        console.error("Error fetching permissions:", error);
+        setPermissions({});
+      } finally {
+        setIsLoadingPermissions(false);
+      }
     };
 
     fetchPermissions();
@@ -295,3 +294,5 @@ export default function AppLayout({
         </div>
   );
 }
+
+    
