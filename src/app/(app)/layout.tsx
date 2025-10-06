@@ -196,14 +196,19 @@ export default function AppLayout({
 
     useEffect(() => {
         const fetchPermissions = async () => {
-            // Defer permission fetching until we are sure who the user is and have their data.
-            if (isUserLoading || isUserDataLoading || !userData) {
-                // If user is not loaded or user data is not loaded, we can't determine permissions yet.
-                // If there's no userData, it means they are either anonymous or their user doc doesn't exist.
-                if(!isUserLoading && !isUserDataLoading) {
-                    setPermissions({});
-                    setIsLoadingPermissions(false);
-                }
+            if (isUserLoading || isUserDataLoading) {
+              return;
+            }
+
+            if (user?.email === 'sa@admin.com') {
+                setPermissions({ all: true });
+                setIsLoadingPermissions(false);
+                return;
+            }
+            
+            if (!userData) {
+                setPermissions({});
+                setIsLoadingPermissions(false);
                 return;
             }
             
@@ -252,7 +257,7 @@ export default function AppLayout({
         };
 
         fetchPermissions();
-    }, [firestore, userData, isUserLoading, isUserDataLoading]);
+    }, [firestore, user, userData, isUserLoading, isUserDataLoading]);
 
 
   if (isUserLoading || isLoadingPermissions || isLicensed === null) {
@@ -293,4 +298,5 @@ export default function AppLayout({
         </div>
   );
 }
+
 
