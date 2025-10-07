@@ -36,7 +36,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { unslugify, slugify } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
-import { useFirestore, useDoc, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useDoc, useMemoFirebase, useUser, useCollection } from '@/firebase';
 import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp, runTransaction } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -98,7 +98,7 @@ function DynamicFormField({ field, value, onChange, disabled }: { field: FormFie
 }
 
 
-export default function NewTransactionEntryPage({ permissions, submodules = [] }: { permissions: PermissionSet, submodules: AppSubmodule[] }) {
+export default function NewTransactionEntryPage({ permissions }: { permissions: PermissionSet }) {
   const params = useParams();
   const submoduleSlug = params.submodule as string;
   const submoduleName = unslugify(submoduleSlug);
@@ -126,7 +126,13 @@ export default function NewTransactionEntryPage({ permissions, submodules = [] }
   const [allFormFields, setAllFormFields] = useState<FormField[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(true);
 
-  const submodule = useMemo(() => submodules.find(s => s.name === submoduleName), [submodules, submoduleName]);
+  const submodulesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+  }, [firestore]);
+
+  const { data: submodules } = useCollection<AppSubmodule>(submodulesQuery);
+  const submodule = useMemo(() => submodules?.find(s => s.name === submoduleName), [submodules, submoduleName]);
   const submoduleId = submodule?.id;
 
 
@@ -388,8 +394,8 @@ export default function NewTransactionEntryPage({ permissions, submodules = [] }
   };
 
 
-  if (isLoadingEntry || (submodule && isLoadingFields)) {
-    return <div>Loading...</div>
+  if (isLoadingEntry || isLoadingFields || !submodule) {
+    return <div>Loading form...</div>
   }
   
   const pageTitle = searchParams.get('editId')
@@ -437,7 +443,6 @@ export default function NewTransactionEntryPage({ permissions, submodules = [] }
             </CardHeader>
             <CardContent>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {(isLoadingFields || !submodule) && <p>Loading form...</p>}
                 {headerFields && headerFields.map(field => (
                     <DynamicFormField 
                         key={field.id} 
