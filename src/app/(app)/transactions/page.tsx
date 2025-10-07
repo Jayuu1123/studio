@@ -15,37 +15,31 @@ export default function TransactionsPage({ permissions }: { permissions: Permiss
 
   const submodulesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    // Query directly for transaction submodules
-    return query(collection(firestore, 'appSubmodules'), where('mainModule', '==', 'Transactions'));
-  }, [firestore]);
-
-  const { data: allSubmodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
-  
-  const filteredSubmodules = useMemo(() => {
-    if (!allSubmodules || !permissions) return [];
+    // Query directly for transaction submodules that the user has permission to read.
+    const allowedSubmoduleSlugs = permissions?.all 
+      ? null // null will skip the slug-based filter if user has 'all' permissions
+      // @ts-ignore
+      : Object.keys(permissions?.transactions || {}).filter(slug => permissions.transactions[slug]?.read);
     
-    // If user has all permissions, no further filtering is needed
-    if (permissions.all) {
-      return allSubmodules;
-    }
-    
-    // @ts-ignore
-    const transactionPermissions = permissions['transactions'];
-    if (typeof transactionPermissions !== 'object' || transactionPermissions === null) {
-        return [];
+    if (allowedSubmoduleSlugs && allowedSubmoduleSlugs.length === 0) {
+        return null; // The user has no permissions for any transaction submodule.
     }
 
-    // Filter based on specific read permissions for each submodule
-    return allSubmodules.filter(sub => {
-        const subSlug = slugify(sub.name);
-        // @ts-ignore
-        return transactionPermissions[subSlug]?.read;
-    });
+    let q = query(collection(firestore, 'appSubmodules'), where('mainModule', '==', 'Transactions'));
 
-  }, [allSubmodules, permissions]);
+    // This check is important. If the user has 'all' permissions, we should not add a 'where' clause for slugs.
+    if (allowedSubmoduleSlugs) {
+        const allowedSubmoduleNames = allowedSubmoduleSlugs.map(slug => slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+         q = query(q, where('name', 'in', allowedSubmoduleNames));
+    }
+    
+    return q;
 
+  }, [firestore, permissions]);
 
-  if (isLoadingSubmodules || !permissions) {
+  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
+
+  if (isLoadingSubmodules) {
       return (
           <div className="flex items-center justify-center h-48">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -53,16 +47,15 @@ export default function TransactionsPage({ permissions }: { permissions: Permiss
       );
   }
 
-
   return (
     <div className="space-y-6">
-      {filteredSubmodules.length > 0 ? (
+      {submodules && submodules.length > 0 ? (
         <div>
           <h2 className="text-xl font-semibold mb-3 text-muted-foreground">
             Transactions
           </h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredSubmodules.map((submodule) => (
+            {submodules.map((submodule) => (
               <SubmoduleCard key={submodule.id} submodule={submodule} />
             ))}
           </div>
@@ -74,7 +67,7 @@ export default function TransactionsPage({ permissions }: { permissions: Permiss
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                You do not have permission to view any submodules in the Transactions module. Please contact an administrator.
+                You do not have permission to view any submodules in the Transactions module, or none have been created. Please contact an administrator or <Link href="/form-setting" className='text-primary underline'>create one now</Link>.
               </p>
             </CardContent>
           </Card>
