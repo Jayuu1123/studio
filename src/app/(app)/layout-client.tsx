@@ -217,7 +217,7 @@ export function AppLayoutClient({
     }
   }, [auth, firestore, user, isUserLoading]);
   
-  const isAppLoading = isUserLoading || !user || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
+  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
   const isSettingsPath = pathname.startsWith('/settings');
   const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
   
