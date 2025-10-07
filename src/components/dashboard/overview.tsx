@@ -1,27 +1,31 @@
 'use client';
 
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { format } from 'date-fns';
 import type { Order } from '@/lib/types';
+import { Skeleton } from '../ui/skeleton';
+import { Card, CardContent } from '../ui/card';
 
 interface OverviewProps {
     data: Order[] | null;
+    isLoading: boolean;
 }
 
-export function Overview({ data }: OverviewProps) {
+export function Overview({ data, isLoading }: OverviewProps) {
   
   const processDataForChart = (orders: Order[] | null) => {
     if (!orders) return [];
     
-    // Aggregate sales by month
     const monthlySales: { [key: string]: number } = {};
 
     orders.forEach(order => {
-      const month = format(new Date(order.orderDate.seconds * 1000), 'MMM');
-      monthlySales[month] = (monthlySales[month] || 0) + order.totalAmount;
+      // Ensure orderDate and seconds are available
+      if (order.orderDate && typeof order.orderDate.seconds === 'number') {
+        const month = format(new Date(order.orderDate.seconds * 1000), 'MMM');
+        monthlySales[month] = (monthlySales[month] || 0) + order.totalAmount;
+      }
     });
 
-    // Create a list of all months to ensure we have data for each one
     const allMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
     const chartData = allMonths.map(month => ({
@@ -34,9 +38,22 @@ export function Overview({ data }: OverviewProps) {
 
   const chartData = processDataForChart(data);
 
+  if (isLoading) {
+      return <Skeleton className="w-full h-[350px]" />;
+  }
+
+  if (!data || data.length === 0) {
+      return (
+          <div className="w-full h-[350px] flex items-center justify-center text-muted-foreground">
+              No transaction data available.
+          </div>
+      )
+  }
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart data={chartData}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis
           dataKey="name"
           stroke="hsl(var(--muted-foreground))"

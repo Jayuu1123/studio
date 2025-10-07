@@ -29,37 +29,44 @@ import {
 import { Overview } from '@/components/dashboard/overview';
 import { RecentSales } from '@/components/dashboard/recent-sales';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
-import type { Order, User } from '@/lib/types';
+import { collection, query, orderBy, limit, where } from 'firebase/firestore';
+import type { Order, User, Customer } from '@/lib/types';
+import { useMemo } from 'react';
 
 export default function DashboardPage() {
-  console.log('--- DashboardPage: Render Start ---');
   const firestore = useFirestore();
 
   const ordersQuery = useMemoFirebase(
-    () => {
-      console.log('DashboardPage: Creating ordersQuery');
-      return firestore ? collection(firestore, 'orders') : null
-    },
+    () => (firestore ? collection(firestore, 'orders') : null),
     [firestore]
   );
   
   const recentOrdersQuery = useMemoFirebase(
-    () => {
-       console.log('DashboardPage: Creating recentOrdersQuery');
-      return firestore ? query(collection(firestore, 'orders'), orderBy('orderDate', 'desc'), limit(5)) : null
-    },
+    () => (firestore ? query(collection(firestore, 'orders'), orderBy('orderDate', 'desc'), limit(5)) : null),
     [firestore]
   );
 
   const { data: orders, isLoading: isLoadingOrders } = useCollection<Order>(ordersQuery);
   const { data: recentOrders, isLoading: isLoadingRecent } = useCollection<Order>(recentOrdersQuery);
+  
+  // Get customer IDs from recent orders to fetch their data in one go
+  const recentCustomerIds = useMemo(() => {
+    if (!recentOrders || recentOrders.length === 0) return [];
+    // Use a Set to get unique customer IDs
+    return [...new Set(recentOrders.map(order => order.customerId))];
+  }, [recentOrders]);
 
+  const customersQuery = useMemoFirebase(() => {
+    if (!firestore || recentCustomerIds.length === 0) return null;
+    return query(collection(firestore, 'customers'), where('__name__', 'in', recentCustomerIds));
+  }, [firestore, recentCustomerIds]);
+
+  const { data: customers, isLoading: isLoadingCustomers } = useCollection<Customer>(customersQuery);
 
   const totalRevenue = orders?.reduce((sum, order) => sum + order.totalAmount, 0) || 0;
   const totalSales = orders?.length || 0;
   
-  console.log(`DashboardPage: isLoadingOrders is ${isLoadingOrders}`);
+  const isLoading = isLoadingOrders || isLoadingRecent || isLoadingCustomers;
 
   return (
     <>
@@ -116,7 +123,7 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Overview data={orders} />
+            <Overview data={orders} isLoading={isLoadingOrders} />
           </CardContent>
         </Card>
         <Card>
@@ -127,7 +134,11 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <RecentSales recentOrders={recentOrders} isLoading={isLoadingRecent} />
+            <RecentSales 
+              recentOrders={recentOrders} 
+              customers={customers}
+              isLoading={isLoading} 
+            />
           </CardContent>
         </Card>
       </div>
