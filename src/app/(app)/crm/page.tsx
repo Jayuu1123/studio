@@ -22,12 +22,6 @@ export default function CrmPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold font-headline">CRM</h1>
-                <Button asChild>
-                    <Link href="/form-setting">
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        Create Submodule
-                    </Link>
-                </Button>
             </div>
 
             {isLoading && (

@@ -24,12 +24,6 @@ export default function PurchasePage() {
     <div className="space-y-6">
         <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold font-headline">Purchase</h1>
-            <Button asChild>
-                <Link href="/form-setting">
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Create Submodule
-                </Link>
-            </Button>
         </div>
 
         {isLoading && (
@@ -55,7 +49,7 @@ export default function PurchasePage() {
                 </CardDescription>
                 </CardHeader>
                 <CardContent>
-                <p>You can create a new submodule for the purchase module using the button above.</p>
+                <p>You can create a new submodule for the purchase module from the Form Setting page.</p>
                 </CardContent>
             </Card>
         )}

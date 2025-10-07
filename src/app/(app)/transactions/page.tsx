@@ -25,12 +25,6 @@ export default function TransactionsPage() {
     <div className="space-y-6">
         <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold font-headline">Transactions</h1>
-            <Button asChild>
-                <Link href="/form-setting">
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Create Submodule
-                </Link>
-            </Button>
         </div>
 
       {isLoadingSubmodules && (
@@ -54,7 +48,7 @@ export default function TransactionsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                No submodules have been created for the Transactions module yet. You can create one now using the button above.
+                No submodules have been created for the Transactions module yet. You can create one from the Form Setting page.
               </p>
             </CardContent>
           </Card>
