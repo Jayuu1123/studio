@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { doc, setDoc, getDoc, collection, query, where, Timestamp, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, Timestamp, serverTimestamp, updateDoc, orderBy } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import type { License, User, Role, PermissionSet, AppSubmodule } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -64,10 +64,8 @@ function DisabledAccountWall() {
 
 export function AppLayoutClient({
   children,
-  submodules,
 }: Readonly<{
   children: React.ReactNode;
-  submodules: AppSubmodule[];
 }>) {
   const auth = useAuth();
   const firestore = useFirestore();
@@ -93,6 +91,15 @@ export function AppLayoutClient({
   }, [firestore, userRoles]);
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
+  
+  const submodulesQuery = useMemoFirebase(() => {
+    // CRITICAL FIX: Do not query until auth state is resolved.
+    if (!firestore || isUserLoading) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
+  }, [firestore, isUserLoading]);
+
+  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
+
 
   useEffect(() => {
     if (isUserDataLoading || isLoadingRoles) return;
@@ -207,7 +214,7 @@ export function AppLayoutClient({
     }
   }, [auth, firestore, user, isUserLoading]);
   
-  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null;
+  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
   const isSettingsPath = pathname.startsWith('/settings');
   const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
   
