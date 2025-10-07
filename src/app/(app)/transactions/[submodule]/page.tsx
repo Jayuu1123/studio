@@ -36,10 +36,10 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { unslugify, slugify } from '@/lib/utils';
-import type { TransactionEntry, PermissionSet, AppSubmodule } from '@/lib/types';
+import type { TransactionEntry, PermissionSet, AppSubmodule, Role, User } from '@/lib/types';
 import Link from 'next/link';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { collection, query, where, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
@@ -60,11 +60,8 @@ const statusConfig: {
   P: { label: 'Pending', color: 'bg-purple-500', symbol: 'P' }, // Kept for backward compatibility
 };
 
-interface TransactionSubmodulePageProps {
-  permissions: PermissionSet;
-}
 
-export default function TransactionSubmodulePage({ permissions }: TransactionSubmodulePageProps) {
+export default function TransactionSubmodulePage() {
   const params = useParams();
   const submodule = params.submodule as string;
   const submoduleName = unslugify(submodule);
@@ -72,6 +69,35 @@ export default function TransactionSubmodulePage({ permissions }: TransactionSub
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useUser();
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: userData } = useDoc<User>(userDocRef);
+  const userRoles = userData?.roles || [];
+
+  const rolesQuery = useMemoFirebase(() => {
+    if (!firestore || !user || userRoles.length === 0) return null;
+    return query(collection(firestore, 'roles'), where('__name__', 'in', userRoles.map(role => slugify(role)) ));
+  }, [firestore, user, userRoles]);
+
+  const { data: roleDocs } = useCollection<Role>(rolesQuery);
+
+  const permissions = useMemo<PermissionSet | null>(() => {
+    if (!user) return null;
+    if (user.email === 'sa@admin.com') return { all: true };
+    if (!roleDocs) return null;
+
+    const mergedPermissions: PermissionSet = {};
+    roleDocs.forEach(role => {
+      if (role.permissions) {
+        Object.assign(mergedPermissions, role.permissions);
+      }
+    });
+    return mergedPermissions;
+  }, [user, roleDocs]);
 
   const entriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -90,23 +116,21 @@ export default function TransactionSubmodulePage({ permissions }: TransactionSub
 
   const canDelete = useMemo(() => {
       if (!permissions || !currentSubmodule) return false;
-      if (user?.email === 'sa@admin.com') return true;
       if (permissions.all) return true;
       const mainModuleSlug = slugify(currentSubmodule.mainModule);
       const subSlug = slugify(currentSubmodule.name);
       // @ts-ignore
       return permissions[mainModuleSlug]?.[subSlug]?.delete;
-  }, [permissions, currentSubmodule, user]);
+  }, [permissions, currentSubmodule]);
   
   const canWrite = useMemo(() => {
       if (!permissions || !currentSubmodule) return false;
-      if (user?.email === 'sa@admin.com') return true;
       if (permissions.all) return true;
       const mainModuleSlug = slugify(currentSubmodule.mainModule);
       const subSlug = slugify(currentSubmodule.name);
       // @ts-ignore
       return permissions[mainModuleSlug]?.[subSlug]?.write;
-  }, [permissions, currentSubmodule, user]);
+  }, [permissions, currentSubmodule]);
 
 
   const handleDeleteEntry = (entryId: string) => {
