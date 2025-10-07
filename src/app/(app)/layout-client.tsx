@@ -110,7 +110,6 @@ export function AppLayoutClient({
         return;
     }
     
-    // sa@admin.com is a super admin with all permissions
     if (userData?.email === 'sa@admin.com') {
       setPermissions({ all: true });
       return;
@@ -200,13 +199,10 @@ export function AppLayoutClient({
     }, [user, userData, isUserLoading, auth, toast, router]);
 
   
-  // This is the gatekeeper. It prevents any children from rendering until all critical data is loaded.
   const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
   const isSettingsPath = pathname.startsWith('/settings');
-  // Only show the license wall if the user is loaded, is not licensed, and not on a settings page.
   const shouldShowWall = user && isLicensed === false && !isSettingsPath && pathname !== '/';
   
-  // Early return for disabled account, even before the main loader.
   if (userData && userData.status === 'disabled') {
     return <DisabledAccountWall />;
   }
@@ -219,7 +215,6 @@ export function AppLayoutClient({
     );
   }
   
-  // Only clone children after all loading is complete.
   const childrenWithProps = React.Children.map(children, child => {
     if (React.isValidElement(child)) {
       // @ts-ignore
