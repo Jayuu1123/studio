@@ -108,23 +108,24 @@ export function Header({ isLicensed, permissions, submodules }: { isLicensed: bo
   
   const hasAccess = (label: string) => {
     if (permissions === null) {
-      return false; // Don't render anything if permissions are not loaded
+      return false; 
     }
     if (permissions.all) {
       return true;
     }
-    // Always show Dashboard, settings and form settings
-    if (['Dashboard', 'Form Setting', 'Settings'].includes(label)) {
-      return true;
-    }
     const mainModuleSlug = slugify(label);
     const mainModulePermission = permissions[mainModuleSlug];
-    return mainModulePermission !== undefined;
+
+    if (mainModulePermission) {
+      return true;
+    }
+    
+    return submodules.some(sub => sub.mainModule === label && mainModulePermission?.[slugify(sub.name)]);
   };
 
 
   const memoizedMobileNavItems = useMemo(() => {
-    if (!permissions || !submodules) return [];
+    if (!permissions) return [];
     return mobileNavItems.filter(item => hasAccess(item.label));
   }, [permissions, submodules]);
 

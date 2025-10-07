@@ -52,18 +52,22 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
     if (permissions.all) {
       return true;
     }
-    // Always show Dashboard, settings and form settings
-    if (['Dashboard', 'Form Setting', 'Settings'].includes(label)) {
-      return true;
-    }
+    
     const mainModuleSlug = slugify(label);
     const mainModulePermission = permissions[mainModuleSlug];
-    return mainModulePermission !== undefined;
+
+    // Show if there is a direct permission for the main module.
+    if (mainModulePermission) {
+      return true;
+    }
+    
+    // Show if there is permission for at least one submodule within this main module.
+    return submodules.some(sub => sub.mainModule === label && mainModulePermission?.[slugify(sub.name)]);
   };
 
 
   const memoizedNavItems = useMemo(() => {
-    if (!permissions || !submodules) return [];
+    if (!permissions) return [];
     return navItems.filter(item => hasAccess(item.label));
   }, [permissions, submodules]);
 
@@ -90,7 +94,7 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
         </Link>
         <TooltipProvider>
           {memoizedNavItems.map((item) => {
-            const isDisabled = isLicensed === false && !item.label.startsWith('Settings');
+            const isDisabled = isLicensed === false && !item.href.startsWith('/settings');
             return (
                 <Tooltip key={item.href}>
                 <TooltipTrigger asChild>

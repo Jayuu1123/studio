@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
-import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, getDoc, collection, query, where, Timestamp, serverTimestamp, updateDoc, orderBy } from 'firebase/firestore';
 import type { License, User, Role, PermissionSet, AppSubmodule } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -76,9 +76,7 @@ export function AppLayoutClient({
   const [permissions, setPermissions] = useState<PermissionSet | null>(null);
   
   const userDocRef = useMemoFirebase(() => {
-    if (!firestore || !user) {
-        return null;
-    }
+    if (!firestore || !user) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
@@ -87,34 +85,31 @@ export function AppLayoutClient({
   const userRoles = userData?.roles || [];
   
   const rolesQuery = useMemoFirebase(() => {
-    if (!firestore || !user || userRoles.length === 0) {
-        return null;
-    }
+    if (!firestore || !user || userRoles.length === 0) return null;
     return query(collection(firestore, 'roles'), where('__name__', 'in', userRoles.map(role => slugify(role)) ));
   }, [firestore, user, userRoles]);
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
   const submodulesQuery = useMemoFirebase(() => {
-    if (!firestore || !user) {
-      return null;
-    }
+    if (!firestore || !user) return null;
     return query(collection(firestore, 'appSubmodules'), orderBy('position'));
   }, [firestore, user]);
 
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
-
-  useEffect(() => {
+ useEffect(() => {
     if (isUserLoading || isUserDataLoading || isLoadingRoles) {
-        return;
+      return;
     }
-    
+
+    // Super admin override
     if (userData?.email === 'sa@admin.com') {
       setPermissions({ all: true });
       return;
     }
 
+    // Logic for regular users
     if (roleDocs) {
       const mergedPermissions: PermissionSet = {};
       roleDocs.forEach(role => {
@@ -122,21 +117,16 @@ export function AppLayoutClient({
           Object.assign(mergedPermissions, role.permissions);
         }
       });
-       if (Object.keys(mergedPermissions).length > 0) {
-        setPermissions(mergedPermissions);
-      } else {
-        setPermissions({});
-      }
+      setPermissions(mergedPermissions);
     } else {
+      // If a user has no roles or roles couldn't be fetched, they have no permissions.
       setPermissions({});
     }
-  }, [userData, roleDocs, isLoadingRoles, isUserDataLoading, isUserLoading]);
+  }, [isUserLoading, isUserDataLoading, isLoadingRoles, userData, roleDocs]);
 
 
   const activeLicenseQuery = useMemoFirebase(() => {
-    if (!firestore || !user) {
-      return null;
-    }
+    if (!firestore || !user) return null;
     return query(
         collection(firestore, 'licenses'), 
         where('status', '==', 'active')
@@ -146,9 +136,15 @@ export function AppLayoutClient({
   const { data: activeLicenses, isLoading: isLoadingLicenses } = useCollection<License>(activeLicenseQuery);
 
   useEffect(() => {
-    if (isLoadingLicenses) {
+    if (isLoadingLicenses || !user) {
         return;
     };
+
+    // The sa@admin.com user doesn't need a license
+    if (user.email === 'sa@admin.com') {
+        setIsLicensed(true);
+        return;
+    }
 
     if (activeLicenses && activeLicenses.length > 0) {
         const now = Timestamp.now();
@@ -159,7 +155,7 @@ export function AppLayoutClient({
     } else {
         setIsLicensed(false);
     }
-  }, [activeLicenses, isLoadingLicenses]);
+  }, [activeLicenses, isLoadingLicenses, user]);
 
    useEffect(() => {
         if (isUserLoading) {
@@ -222,7 +218,7 @@ export function AppLayoutClient({
   const childrenWithProps = React.Children.map(children, child => {
     if (React.isValidElement(child)) {
       // @ts-ignore
-      return React.cloneElement(child, { permissions, submodules: submodules || [] });
+      return React.cloneElement(child, { permissions: permissions || {}, submodules: submodules || [] });
     }
     return child;
   });
