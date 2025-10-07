@@ -123,6 +123,9 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
   const formDataRef = useRef(formData);
   const manualSaveRef = useRef(false);
 
+  const [allFormFields, setAllFormFields] = useState<FormField[]>([]);
+  const [isLoadingFields, setIsLoadingFields] = useState(true);
+
   useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
@@ -136,13 +139,34 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
   const submodule = submodules?.[0];
   const submoduleId = submodule?.id;
 
-  const formFieldsQuery = useMemoFirebase(() => {
-    if(!firestore || !submoduleId) return null; // Wait for submoduleId
-    return query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'), orderBy('position'));
-  }, [firestore, submoduleId]);
+  useEffect(() => {
+    const fetchFields = async () => {
+        if (!firestore || !submoduleId) {
+            setIsLoadingFields(false);
+            return;
+        }
 
-  const { data: allFormFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
-  
+        setIsLoadingFields(true);
+        try {
+            const fieldsQuery = query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'), orderBy('position'));
+            const querySnapshot = await getDocs(fieldsQuery);
+            const fields = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormField));
+            setAllFormFields(fields);
+        } catch (error) {
+            console.error("Failed to fetch form fields:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Could not load form fields.'
+            });
+        } finally {
+            setIsLoadingFields(false);
+        }
+    };
+
+    fetchFields();
+  }, [firestore, submoduleId, toast]);
+
   const headerFields = useMemo(() => allFormFields?.filter(f => f.section === 'header') || [], [allFormFields]);
   const detailFields = useMemo(() => allFormFields?.filter(f => f.section === 'detail') || [], [allFormFields]);
 
@@ -492,9 +516,10 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
                             ))}
                         </TableBody>
                     </Table>
-                    {detailFields.length === 0 && (
+                    {detailFields.length === 0 && !isLoadingFields &&(
                          <p className="text-muted-foreground text-center py-4">No detail fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/details`} className="text-primary underline">Design the form now</Link>.</p>
                     )}
+                    {isLoadingFields && <p className="text-muted-foreground text-center py-4">Loading fields...</p>}
                 </CardContent>
             </Card>
         </div>
