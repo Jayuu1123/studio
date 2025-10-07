@@ -124,17 +124,10 @@ export function Header({ isLicensed, permissions, submodules }: { isLicensed: bo
     const mainModuleSlug = slugify(label);
     const mainModulePermission = permissions[mainModuleSlug];
 
-    // Case 1: Direct permission for the main module (e.g., "sales": true)
-    if (mainModulePermission === true) {
-      return true;
-    }
-
-    // Case 2: Granular permissions exist for submodules within the main module
-    if (typeof mainModulePermission === 'object' && mainModulePermission !== null && Object.keys(mainModulePermission).length > 0) {
-      return true;
-    }
-
-    return false;
+    // Grant access if the permission exists for the main module.
+    // This can be `true` for full access or an object for granular access.
+    // The mere presence of the key indicates the user should see the parent module.
+    return mainModulePermission !== undefined;
   }
 
 
