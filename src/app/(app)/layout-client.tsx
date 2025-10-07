@@ -109,7 +109,8 @@ export function AppLayoutClient({
     if (isUserLoading || isUserDataLoading || isLoadingRoles) {
         return;
     }
-
+    
+    // sa@admin.com is a super admin with all permissions
     if (userData?.email === 'sa@admin.com') {
       setPermissions({ all: true });
       return;
@@ -202,7 +203,8 @@ export function AppLayoutClient({
   // This is the gatekeeper. It prevents any children from rendering until all critical data is loaded.
   const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
   const isSettingsPath = pathname.startsWith('/settings');
-  const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
+  // Only show the license wall if the user is loaded, is not licensed, and not on a settings page.
+  const shouldShowWall = user && isLicensed === false && !isSettingsPath && pathname !== '/';
   
   // Early return for disabled account, even before the main loader.
   if (userData && userData.status === 'disabled') {
@@ -230,7 +232,7 @@ export function AppLayoutClient({
         <>
             <Nav isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
-                <Header isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
+                <Header isLicensed={isLicensed} permissions={permissions || {}} submodules={submodules || []} />
                 <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 relative">
                     <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
                         {childrenWithProps}
