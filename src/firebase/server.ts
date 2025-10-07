@@ -7,7 +7,7 @@ import { getAuth } from 'firebase-admin/auth';
 let adminApp: App;
 
 // This robust singleton pattern ensures the Firebase Admin app is initialized only once.
-if (!getApps().length) {
+if (getApps().length === 0) {
   adminApp = initializeApp();
 } else {
   adminApp = getApp();
