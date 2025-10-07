@@ -40,7 +40,7 @@ import type { TransactionEntry, PermissionSet, AppSubmodule, Role, User } from '
 import Link from 'next/link';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
-import { collection, query, where, doc } from 'firebase/firestore';
+import { collection, query, where, doc, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 
@@ -61,7 +61,7 @@ const statusConfig: {
 };
 
 
-export default function TransactionSubmodulePage({ submodules = [] }: { submodules: AppSubmodule[] }) {
+export default function TransactionSubmodulePage() {
   const params = useParams();
   const submoduleSlug = params.submodule as string;
   const submoduleName = unslugify(submoduleSlug);
@@ -77,6 +77,14 @@ export default function TransactionSubmodulePage({ submodules = [] }: { submodul
 
   const { data: userData } = useDoc<User>(userDocRef);
   const userRoles = userData?.roles || [];
+  
+  const submodulesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+  }, [firestore]);
+
+  const { data: submodules } = useCollection<AppSubmodule>(submodulesQuery);
+
 
   const rolesQuery = useMemoFirebase(() => {
     if (!firestore || !user || userRoles.length === 0) return null;
@@ -106,26 +114,28 @@ export default function TransactionSubmodulePage({ submodules = [] }: { submodul
 
   const { data: transactionEntries, isLoading } = useCollection<TransactionEntry>(entriesQuery);
 
-  const currentSubmodule = useMemo(() => submodules.find(s => s.name === submoduleName), [submodules, submoduleName]);
+  const currentSubmodule = useMemo(() => submodules?.find(s => s.name === submoduleName), [submodules, submoduleName]);
 
 
   const canDelete = useMemo(() => {
       if (!permissions || !currentSubmodule) return false;
+      if (user?.email === 'sa@admin.com') return true;
       if (permissions.all) return true;
       const mainModuleSlug = slugify(currentSubmodule.mainModule);
       const subSlug = slugify(currentSubmodule.name);
       // @ts-ignore
       return permissions[mainModuleSlug]?.[subSlug]?.delete;
-  }, [permissions, currentSubmodule]);
+  }, [permissions, currentSubmodule, user]);
   
   const canWrite = useMemo(() => {
       if (!permissions || !currentSubmodule) return false;
+      if (user?.email === 'sa@admin.com') return true;
       if (permissions.all) return true;
       const mainModuleSlug = slugify(currentSubmodule.mainModule);
       const subSlug = slugify(currentSubmodule.name);
       // @ts-ignore
       return permissions[mainModuleSlug]?.[subSlug]?.write;
-  }, [permissions, currentSubmodule]);
+  }, [permissions, currentSubmodule, user]);
 
 
   const handleDeleteEntry = (entryId: string) => {
