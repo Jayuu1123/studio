@@ -219,14 +219,16 @@ export function AppLayoutClient({
   
 
   const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null;
+  const isSettingsPath = pathname.startsWith('/settings');
+  const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
   
-  // Re-render nav and header with client-side permissions and license state
-  // This is a bit of a hack, but necessary because the parent layout is now a server component
-  // In a full refactor, we would pass state up or use a global state manager
-  useEffect(() => {
-    // This is just to force a re-render of Nav and Header which are outside this component
-  }, [isLicensed, permissions, submodules]);
-
+  const childrenWithPermissions = React.Children.map(children, child => {
+    if (React.isValidElement(child)) {
+      // @ts-ignore
+      return React.cloneElement(child, { permissions });
+    }
+    return child;
+  });
 
   if (isAppLoading) {
     return (
@@ -239,17 +241,6 @@ export function AppLayoutClient({
   if (userData && userData.status === 'disabled') {
     return <DisabledAccountWall />;
   }
-
-  const isSettingsPath = pathname.startsWith('/settings');
-  const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
-  
-  const childrenWithPermissions = React.Children.map(children, child => {
-    if (React.isValidElement(child)) {
-      // @ts-ignore
-      return React.cloneElement(child, { permissions });
-    }
-    return child;
-  });
 
   return (
         <>
