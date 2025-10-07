@@ -1,4 +1,3 @@
-'use server';
 // IMPORTANT: This file is for server-side use only.
 // It uses the Firebase Admin SDK, which has elevated privileges.
 import { initializeApp, getApps, getApp } from 'firebase-admin/app';
