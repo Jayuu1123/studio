@@ -11,7 +11,7 @@ import { useAuth, useFirestore } from '@/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
 function Logo() {
@@ -72,11 +72,28 @@ export default function LoginPage() {
         // Generate a new session ID
         const newSessionId = uuidv4();
         
-        // Use setDoc with merge to safely create or update the user's document
         const userDocRef = doc(firestore, 'users', user.uid);
-        await setDoc(userDocRef, {
-            sessionId: newSessionId,
-        }, { merge: true });
+        
+        // Check if the user document already exists
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (!userDocSnap.exists()) {
+          // Document doesn't exist, create it with initial data
+          await setDoc(userDocRef, {
+              id: user.uid,
+              username: user.email?.split('@')[0], // Set a default username
+              email: user.email,
+              roles: email === 'sa@admin.com' ? ['super-admin'] : ['user'], // Assign a default role
+              status: 'active',
+              sessionId: newSessionId,
+          });
+        } else {
+          // Document exists, just update the session ID
+           await setDoc(userDocRef, {
+              sessionId: newSessionId,
+          }, { merge: true });
+        }
+
 
         // Store the session ID in the client's session storage
         sessionStorage.setItem('userSessionId', newSessionId);
