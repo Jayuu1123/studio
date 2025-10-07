@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ChevronLeft, FileText, PlusCircle, Trash2, Save, AlertCircle } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { useFirestore, useDoc, useMemoFirebase } from "@/firebase";
-import { collection, doc, query, where, orderBy, getDocs } from "firebase/firestore";
+import { collection, doc, query, orderBy, getDocs } from "firebase/firestore";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import type { AppSubmodule, FormField } from "@/lib/types";
 import { useParams } from "next/navigation";
@@ -47,14 +47,18 @@ export default function HeaderFormPage() {
             setError(null);
 
             try {
+                 // Fetch all fields and filter/sort on the client to avoid index issues
                 const formFieldsQuery = query(
-                    collection(firestore, 'appSubmodules', submoduleId, 'formFields'),
-                    where('section', '==', 'header'),
-                    orderBy('position')
+                    collection(firestore, 'appSubmodules', submoduleId, 'formFields')
                 );
                 const querySnapshot = await getDocs(formFieldsQuery);
-                const fetchedFields = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormField));
-                setFields(fetchedFields);
+                const allFields = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormField));
+                
+                const headerFields = allFields
+                    .filter(field => field.section === 'header')
+                    .sort((a, b) => a.position - b.position);
+
+                setFields(headerFields);
             } catch (e: any) {
                 console.error("Failed to fetch header fields:", e);
                 setError("Could not load header fields. Please check permissions and try again.");
