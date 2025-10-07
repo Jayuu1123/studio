@@ -1,13 +1,12 @@
 'use server';
 import React from 'react';
 import { getDocs, collection, query, orderBy } from 'firebase/firestore';
-import { initializeFirebase } from '@/firebase/server'; // Import a server-side initializer
+import { adminFirestore } from '@/firebase/server';
 import { Nav } from '@/components/nav';
 import { Header } from '@/components/header';
 import type { AppSubmodule } from '@/lib/types';
 import { AppLayoutClient } from './layout-client';
 
-// This is now a Server Component. It fetches data on the server.
 async function getSubmodules(firestore: any): Promise<AppSubmodule[]> {
   if (!firestore) return [];
   try {
@@ -15,9 +14,7 @@ async function getSubmodules(firestore: any): Promise<AppSubmodule[]> {
     const snapshot = await getDocs(submodulesQuery);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AppSubmodule[];
   } catch (error) {
-    // This error will be caught by Next.js error boundaries on the server.
     console.error("Critical Error: Failed to fetch submodules on server-side:", error);
-    // Return empty array to allow the app to render, though nav will be incomplete.
     return [];
   }
 }
@@ -27,9 +24,7 @@ export default async function AppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Initialize firebase admin on the server to fetch data without rule restrictions
-  const { firestore } = initializeFirebase();
-  const submodules = await getSubmodules(firestore);
+  const submodules = await getSubmodules(adminFirestore);
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
