@@ -1,6 +1,6 @@
 // IMPORTANT: This file is for server-side use only.
 // It uses the Firebase Admin SDK, which has elevated privileges.
-import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
@@ -9,9 +9,7 @@ import { getAuth } from 'firebase-admin/auth';
 // We initialize the app without any arguments.
 const adminApp =
   getApps().find((app) => app.name === 'admin') ||
-  initializeApp({
-    // No explicit credential needed in App Hosting.
-  }, 'admin');
+  initializeApp({}, 'admin');
 
 
 export const adminAuth = getAuth(adminApp);

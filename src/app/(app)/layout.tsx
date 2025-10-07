@@ -11,7 +11,7 @@ import { AppLayoutClient } from './layout-client';
 async function getSubmodules(firestore: any): Promise<AppSubmodule[]> {
   if (!firestore) return [];
   try {
-    const submodulesQuery = query(collection(firestore, 'appSubmodules'), orderBy('position'));
+    const submodulesQuery = query(collection(firestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
     const snapshot = await getDocs(submodulesQuery);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AppSubmodule[];
   } catch (error) {
