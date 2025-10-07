@@ -118,8 +118,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
   const [entryId, setEntryId] = useState<string | null>(searchParams.get('editId') || searchParams.get('duplicateId'));
   
   const [initialFormData, setInitialFormData] = useState<Partial<TransactionEntry> | null>(null);
-  const [isEditing, setIsEditing] = useState(!searchParams.get('editId'));
-
+  
   const formDataRef = useRef(formData);
   const manualSaveRef = useRef(false);
 
@@ -134,6 +133,22 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
   const { data: submodules } = useCollection<AppSubmodule>(submodulesQuery);
   const submodule = useMemo(() => submodules?.find(s => s.name === submoduleName), [submodules, submoduleName]);
   const submoduleId = submodule?.id;
+  
+  const canWrite = useMemo(() => {
+      if (!permissions || !submodule) return false;
+      if (user?.email === 'sa@admin.com') return true;
+      if (permissions.all) return true;
+      const mainModuleSlug = slugify(submodule.mainModule);
+      const subSlug = slugify(submodule.name);
+      // @ts-ignore
+      return permissions[mainModuleSlug]?.[subSlug]?.write;
+  }, [permissions, submodule, user]);
+
+  const [isEditing, setIsEditing] = useState(canWrite);
+
+  useEffect(() => {
+      setIsEditing(canWrite);
+  },[canWrite])
 
 
   useEffect(() => {
@@ -178,17 +193,6 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
 
   const { data: loadedEntry, isLoading: isLoadingEntry } = useDoc<TransactionEntry>(docToLoadRef);
   
-  const canWrite = useMemo(() => {
-      if (!permissions || !submodule) return false;
-      if (user?.email === 'sa@admin.com') return true;
-      if (permissions.all) return true;
-      const mainModuleSlug = slugify(submodule.mainModule);
-      const subSlug = slugify(submodule.name);
-      // @ts-ignore
-      return permissions[mainModuleSlug]?.[subSlug]?.write;
-  }, [permissions, submodule, user]);
-
-
   const recursiveConvertToDate = (obj: any): any => {
     if (!obj) return obj;
     if (Array.isArray(obj)) {
@@ -231,7 +235,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
         setFormData(dataToLoad);
         setInitialFormData(JSON.parse(JSON.stringify(dataToLoad)));
     }
-}, [loadedEntry, searchParams]);
+}, [loadedEntry, searchParams, canWrite]);
 
 
   const recursiveConvertToTimestamp = (obj: any): any => {
