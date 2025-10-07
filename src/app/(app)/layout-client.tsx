@@ -178,6 +178,9 @@ export function AppLayoutClient({
         const adminPassword = 'saadmin';
         
         try {
+            // This part is problematic because it might run for non-admin users.
+            // A better approach would be a separate setup script or a callable cloud function.
+            // For now, we'll keep it but rely on the catch block to handle existing users.
             const adminRoleRef = doc(firestore, 'roles', 'admin');
             const adminRoleSnap = await getDoc(adminRoleRef);
             if (!adminRoleSnap.exists()) {
@@ -214,10 +217,12 @@ export function AppLayoutClient({
         }
     };
     
-    setupAdmin();
-  }, [auth, firestore]);
+    // Only run setup if no user is logged in, to avoid trying to create admin on every load
+    if (!user && !isUserLoading) {
+        setupAdmin();
+    }
+  }, [auth, firestore, user, isUserLoading]);
   
-
   const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null;
   const isSettingsPath = pathname.startsWith('/settings');
   const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
