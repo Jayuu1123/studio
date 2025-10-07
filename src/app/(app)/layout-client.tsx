@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
-import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { doc, setDoc, getDoc, collection, query, where, Timestamp, serverTimestamp, updateDoc, orderBy } from 'firebase/firestore';
 import type { License, User, Role, PermissionSet, AppSubmodule } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -98,19 +98,17 @@ export function AppLayoutClient({
 
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
- useEffect(() => {
-    if (isUserLoading || isUserDataLoading || isLoadingRoles) {
+  useEffect(() => {
+    if (isUserLoading || !user) {
       return;
     }
-
     // Super admin override
-    if (userData?.email === 'sa@admin.com') {
+    if (user.email === 'sa@admin.com') {
       setPermissions({ all: true });
       return;
     }
-
     // Logic for regular users
-    if (roleDocs) {
+    if (!isLoadingRoles && roleDocs) {
       const mergedPermissions: PermissionSet = {};
       roleDocs.forEach(role => {
         if (role.permissions) {
@@ -118,11 +116,11 @@ export function AppLayoutClient({
         }
       });
       setPermissions(mergedPermissions);
-    } else {
+    } else if (!isLoadingRoles) {
       // If a user has no roles or roles couldn't be fetched, they have no permissions.
       setPermissions({});
     }
-  }, [isUserLoading, isUserDataLoading, isLoadingRoles, userData, roleDocs]);
+  }, [isUserLoading, user, isLoadingRoles, roleDocs]);
 
 
   const activeLicenseQuery = useMemoFirebase(() => {
