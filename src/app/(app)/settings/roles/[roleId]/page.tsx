@@ -1,8 +1,8 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, updateDoc, collection, query, orderBy } from 'firebase/firestore';
+import { useFirestore, useDoc, useMemoFirebase, useUser } from '@/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 import type { Role, AppSubmodule, PermissionSet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,14 +42,16 @@ export default function ManagePermissionsPage({ submodules = [] }: { submodules:
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
+  const { user } = useUser();
   const roleId = params.roleId as string;
 
   const [permissions, setPermissions] = useState<PermissionSet>({});
 
   const roleRef = useMemoFirebase(() => {
-    if (!firestore || !roleId) return null;
+    if (!firestore || !roleId || !user) return null;
     return doc(firestore, 'roles', roleId);
-  }, [firestore, roleId]);
+  }, [firestore, roleId, user]);
+
   const { data: role, isLoading: isLoadingRole } = useDoc<Role>(roleRef);
 
   useEffect(() => {
