@@ -44,7 +44,6 @@ const navItems = [
 
 export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet | null, submodules: AppSubmodule[] }) {
   const pathname = usePathname();
-  const { user } = useUser();
   
   const hasAccess = (label: string) => {
     // Before permissions are loaded, don't show anything except dashboard/settings
@@ -52,8 +51,7 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
       return ['Dashboard', 'Settings'].includes(label);
     }
 
-    // Super admin sees all
-    if (user?.email === 'sa@admin.com' || permissions.all) {
+    if (permissions.all) {
       return true;
     }
 
@@ -63,14 +61,14 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
     }
     
     // For other modules, check if user has any permission for it.
-    // This could be a direct boolean or an object with sub-permissions.
     const permission = permissions[slugify(label)];
+
+    // Grant access if permission is true, or an object (implying sub-permissions)
     if (permission === true || (typeof permission === 'object' && permission !== null)) {
       return true;
     }
     
-    // Also, check if any of the submodules belong to this main module, just in case
-    // permissions are granted at a submodule level but not main module level.
+    // Fallback for dynamically created modules that might not have a top-level permission entry
     const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
     if(hasSubmodulesForModule && permission) return true;
 

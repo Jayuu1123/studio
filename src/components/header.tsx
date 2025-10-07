@@ -17,7 +17,6 @@ import {
   HeartHandshake,
   ArrowRightLeft,
   FileText,
-  Fingerprint,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -106,14 +105,13 @@ function BreadcrumbNav() {
 
 export function Header({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet | null, submodules: AppSubmodule[] }) {
   const pathname = usePathname();
-  const { user } = useUser();
   
   const hasAccess = (label: string) => {
     if (permissions === null) {
       return ['Dashboard', 'Settings'].includes(label);
     }
 
-    if (user?.email === 'sa@admin.com' || permissions.all) {
+    if (permissions.all) {
       return true;
     }
 

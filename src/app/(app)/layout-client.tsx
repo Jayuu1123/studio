@@ -93,9 +93,10 @@ export function AppLayoutClient({
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
   const submodulesQuery = useMemoFirebase(() => {
-    if (!firestore || isUserLoading || !user) return null;
+    // CRITICAL: Do not run this query until user status is fully resolved.
+    if (!firestore || isUserLoading) return null;
     return query(collection(firestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
-  }, [firestore, isUserLoading, user]);
+  }, [firestore, isUserLoading]);
 
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
@@ -123,12 +124,12 @@ export function AppLayoutClient({
 
 
   const activeLicenseQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || isUserLoading) return null;
     return query(
         collection(firestore, 'licenses'), 
         where('status', '==', 'active')
     );
-  }, [firestore, user]);
+  }, [firestore, isUserLoading]);
 
   const { data: activeLicenses, isLoading: isLoadingLicenses } = useCollection<License>(activeLicenseQuery);
 
@@ -147,6 +148,13 @@ export function AppLayoutClient({
   }, [activeLicenses, isLoadingLicenses]);
 
    useEffect(() => {
+        if (isUserLoading) return; // Wait until auth state is known
+
+        if (!user) {
+            router.push('/');
+            return;
+        }
+
         if (userData?.status === 'disabled') {
             if (auth) {
                 toast({
@@ -172,50 +180,8 @@ export function AppLayoutClient({
             }
         }
 
-    }, [userData, auth, toast, router]);
+    }, [user, userData, isUserLoading, auth, toast, router]);
 
-    useEffect(() => {
-        if (!isUserLoading && !user) {
-            router.push('/');
-        }
-    }, [isUserLoading, user, router]);
-
-  useEffect(() => {
-    const setupAdmin = async () => {
-        if (!auth || !firestore) return;
-
-        try {
-            const userCredential = await createUserWithEmailAndPassword(auth, 'sa@admin.com', 'saadmin');
-            const adminUID = userCredential.user.uid;
-            
-            const adminRoleRef = doc(firestore, 'roles', 'admin');
-            await setDoc(adminRoleRef, {
-                id: 'admin',
-                name: 'Admin',
-                description: 'Super administrator with all permissions.',
-                permissions: { all: true }
-            }, { merge: true });
-
-            const userDocRef = doc(firestore, 'users', adminUID);
-            await setDoc(userDocRef, {
-                username: 'sa',
-                email: 'sa@admin.com',
-                id: adminUID,
-                roles: ['Admin'],
-                status: 'active'
-            });
-
-        } catch (error: any) {
-            if (error.code !== 'auth/email-already-in-use') {
-                console.error("Failed to set up admin user:", error);
-            }
-        }
-    };
-    
-    if (!user && !isUserLoading) {
-        setupAdmin();
-    }
-  }, [auth, firestore, user, isUserLoading]);
   
   const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
   const isSettingsPath = pathname.startsWith('/settings');
