@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { MoreHorizontal, ArrowUp, ArrowDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { collection, serverTimestamp, doc, query, orderBy } from "firebase/firestore";
 import type { AppSubmodule } from "@/lib/types";
@@ -24,6 +24,7 @@ export default function FormSettingPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
     const router = useRouter();
+    const { user } = useUser();
 
     const submodulesQuery = useMemoFirebase(() => {
         if (!firestore) return null;
@@ -309,7 +310,3 @@ export default function FormSettingPage() {
     </div>
   );
 }
-
-  
-
-    
