@@ -2,8 +2,6 @@
 import React from 'react';
 import { getDocs, collection, query, orderBy } from 'firebase/firestore';
 import { adminFirestore } from '@/firebase/server';
-import { Nav } from '@/components/nav';
-import { Header } from '@/components/header';
 import type { AppSubmodule } from '@/lib/types';
 import { AppLayoutClient } from './layout-client';
 
