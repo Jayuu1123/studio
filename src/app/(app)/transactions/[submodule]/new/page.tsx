@@ -115,13 +115,11 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
       lineItems: [{}], // Start with one empty line item
   });
 
-  // This state now holds the dynamic ID from query params or the one we create
   const [entryId, setEntryId] = useState<string | null>(searchParams.get('editId') || searchParams.get('duplicateId'));
   
   const [initialFormData, setInitialFormData] = useState<Partial<TransactionEntry> | null>(null);
   const [isEditing, setIsEditing] = useState(!searchParams.get('editId'));
 
-  // Use a ref to keep the latest formData for the cleanup function
   const formDataRef = useRef(formData);
   const manualSaveRef = useRef(false);
 
@@ -134,12 +132,12 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
     return query(collection(firestore, 'appSubmodules'), where('name', '==', submoduleName), limit(1));
   }, [firestore, submoduleName]);
   
-  const { data: submodules } = useCollection<AppSubmodule>(submoduleQuery);
+  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submoduleQuery);
   const submodule = submodules?.[0];
   const submoduleId = submodule?.id;
 
   const formFieldsQuery = useMemoFirebase(() => {
-    if(!firestore || !submoduleId) return null;
+    if(!firestore || !submoduleId) return null; // Wait for submoduleId
     return query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'), orderBy('position'));
   }, [firestore, submoduleId]);
 
@@ -190,16 +188,15 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
     if (loadedEntry) {
         let dataToLoad = { ...loadedEntry };
         
-        // Convert all Timestamps to JS Dates
         dataToLoad = recursiveConvertToDate(dataToLoad);
 
         if (searchParams.get('duplicateId')) {
             delete dataToLoad.id;
             delete dataToLoad.docNo;
             delete dataToLoad.docNo_sequential;
-            dataToLoad.status = 'DR'; // Start as a draft/pending
-            setEntryId(null); // It's a new entry now
-            setIsEditing(true); // Duplicates should be editable
+            dataToLoad.status = 'DR';
+            setEntryId(null);
+            setIsEditing(true);
         }
 
         if (!dataToLoad.lineItems || dataToLoad.lineItems.length === 0) {
@@ -240,7 +237,6 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
  const saveCurrentStateAsDraft = useCallback(async (currentData: Partial<TransactionEntry>) => {
     if (!firestore || !submoduleId) return null;
 
-    // Create a deep copy to avoid mutating the original object and convert dates
     const dataToSave = recursiveConvertToTimestamp(JSON.parse(JSON.stringify(currentData)));
     dataToSave.status = 'DR';
     dataToSave.submodule = submoduleName;
@@ -259,7 +255,6 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
 
   useEffect(() => {
     return () => {
-      // If a manual save just happened, don't run auto-save
       if (manualSaveRef.current) return;
       
       const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
@@ -304,7 +299,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
         } catch (error) {
             console.error("Transaction failed: ", error);
             toast({ variant: 'destructive', title: 'Failed to Save', description: 'Could not generate a document number. Please try again.' });
-            manualSaveRef.current = false; // Reset on failure
+            manualSaveRef.current = false;
             return;
         }
     }
@@ -329,11 +324,8 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
     const updatedData = updateFn(formData);
 
     if (!formData.id && isEditing) {
-      // It's a new entry and the user just changed something for the first time.
-      // Let's create a draft right now.
       const draftId = await saveCurrentStateAsDraft({ ...formData, ...updatedData });
       if (draftId) {
-        // Update URL without navigation to reflect new draft ID
         router.replace(`/transactions/${submoduleSlug}/new?editId=${draftId}`, { scroll: false });
         setFormData(prev => ({...prev, ...updatedData, id: draftId}));
         setEntryId(draftId);
@@ -377,7 +369,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
   };
 
 
-  if (isLoadingEntry || isLoadingFields) {
+  if (isLoadingEntry || isLoadingSubmodules || (submoduleId && isLoadingFields)) {
     return <div>Loading...</div>
   }
   
@@ -426,7 +418,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
             </CardHeader>
             <CardContent>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {isLoadingFields && <p>Loading form...</p>}
+                {(isLoadingFields || isLoadingSubmodules) && <p>Loading form...</p>}
                 {headerFields && headerFields.map(field => (
                     <DynamicFormField 
                         key={field.id} 
