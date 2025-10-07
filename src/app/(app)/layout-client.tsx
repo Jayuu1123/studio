@@ -86,23 +86,22 @@ export function AppLayoutClient({
   const userRoles = userData?.roles || [];
   
   const rolesQuery = useMemoFirebase(() => {
-    if (!firestore || userRoles.length === 0) return null;
+    if (!firestore || !user || userRoles.length === 0) return null;
     return query(collection(firestore, 'roles'), where('name', 'in', userRoles));
-  }, [firestore, userRoles]);
+  }, [firestore, user, userRoles]);
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
   const submodulesQuery = useMemoFirebase(() => {
-    // CRITICAL: Do not run this query until user status is fully resolved.
-    if (!firestore || isUserLoading) return null;
+    if (!firestore || isUserLoading || !user) return null;
     return query(collection(firestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
-  }, [firestore, isUserLoading]);
+  }, [firestore, isUserLoading, user]);
 
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
 
   useEffect(() => {
-    if (isUserDataLoading || isLoadingRoles) return;
+    if (isUserLoading || isUserDataLoading || isLoadingRoles) return;
 
     if (userData?.email === 'sa@admin.com') {
       setPermissions({ all: true });
@@ -120,16 +119,16 @@ export function AppLayoutClient({
     } else {
       setPermissions({});
     }
-  }, [userData, roleDocs, isLoadingRoles, isUserDataLoading]);
+  }, [userData, roleDocs, isLoadingRoles, isUserDataLoading, isUserLoading]);
 
 
   const activeLicenseQuery = useMemoFirebase(() => {
-    if (!firestore || isUserLoading) return null;
+    if (!firestore || isUserLoading || !user) return null;
     return query(
         collection(firestore, 'licenses'), 
         where('status', '==', 'active')
     );
-  }, [firestore, isUserLoading]);
+  }, [firestore, isUserLoading, user]);
 
   const { data: activeLicenses, isLoading: isLoadingLicenses } = useCollection<License>(activeLicenseQuery);
 
@@ -148,7 +147,7 @@ export function AppLayoutClient({
   }, [activeLicenses, isLoadingLicenses]);
 
    useEffect(() => {
-        if (isUserLoading) return; // Wait until auth state is known
+        if (isUserLoading) return;
 
         if (!user) {
             router.push('/');
@@ -161,6 +160,10 @@ export function AppLayoutClient({
                     variant: 'destructive',
                     title: 'Account Disabled',
                     description: 'Your account has been disabled. Logging you out.',
+                });
+                 signOut(auth).then(() => {
+                    sessionStorage.removeItem('userSessionId');
+                    router.push('/');
                 });
             }
         }
@@ -195,27 +198,30 @@ export function AppLayoutClient({
     return child;
   });
 
-  if (isAppLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
   if (userData && userData.status === 'disabled') {
     return <DisabledAccountWall />;
   }
 
+  if (!user && !isUserLoading) {
+    // This case is handled by the useEffect redirect, but as a fallback render nothing.
+    return null;
+  }
+  
   return (
         <>
             <Nav isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
                 <Header isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
                 <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 relative">
-                    <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
-                            {childrenWithPermissions}
-                    </div>
+                    {isAppLoading ? (
+                         <div className="flex items-center justify-center min-h-[calc(100vh-10rem)]">
+                            <Loader2 className="h-8 w-8 animate-spin" />
+                         </div>
+                    ) : (
+                        <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
+                                {childrenWithPermissions}
+                        </div>
+                    )}
                     {shouldShowWall && <LicenseWall />}
                 </main>
             </div>
