@@ -215,7 +215,7 @@ export function AppLayoutClient({
   
   const childrenWithProps = React.Children.map(children, child => {
     if (React.isValidElement(child)) {
-      // @ts-ignore
+      // @ts-ignore - cloning to pass props down to child server components
       return React.cloneElement(child, { permissions: permissions || {}, submodules: submodules || [] });
     }
     return child;
