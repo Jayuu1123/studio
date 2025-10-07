@@ -109,15 +109,27 @@ export function Header({ isLicensed, permissions, submodules }: { isLicensed: bo
   const { user } = useUser();
   
   const hasAccess = (label: string) => {
-    if (!permissions) return false;
-    if (user?.email === 'sa@admin.com') return true;
-    if (permissions.all) return true;
+    if (permissions === null) {
+      return ['Dashboard', 'Settings'].includes(label);
+    }
 
-    const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
-    if (!hasSubmodulesForModule && !['Dashboard', 'Form Setting', 'Settings'].includes(label)) return false;
+    if (user?.email === 'sa@admin.com' || permissions.all) {
+      return true;
+    }
 
+    if (['Dashboard', 'Form Setting', 'Settings'].includes(label)) {
+      return true;
+    }
+    
     const permission = permissions[slugify(label)];
-    return permission === true || (typeof permission === 'object' && permission !== null);
+    if (permission === true || (typeof permission === 'object' && permission !== null)) {
+      return true;
+    }
+    
+    const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
+    if(hasSubmodulesForModule && permission) return true;
+
+    return false;
   }
 
   const memoizedMobileNavItems = useMemo(() => {

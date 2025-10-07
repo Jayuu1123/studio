@@ -47,20 +47,34 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
   const { user } = useUser();
   
   const hasAccess = (label: string) => {
-    if (!permissions) return false;
-    // Hardcoded override for the super admin. This is a failsafe.
-    if (user?.email === 'sa@admin.com') return true;
+    // Before permissions are loaded, don't show anything except dashboard/settings
+    if (permissions === null) {
+      return ['Dashboard', 'Settings'].includes(label);
+    }
 
-    if (permissions.all) return true;
+    // Super admin sees all
+    if (user?.email === 'sa@admin.com' || permissions.all) {
+      return true;
+    }
+
+    // Always show Dashboard and settings-related pages
+    if (['Dashboard', 'Form Setting', 'Settings'].includes(label)) {
+      return true;
+    }
     
-    // Check if there are any submodules for this main module label
-    const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
-    if (!hasSubmodulesForModule && !['Dashboard', 'Form Setting', 'Settings'].includes(label)) return false;
-
-
+    // For other modules, check if user has any permission for it.
+    // This could be a direct boolean or an object with sub-permissions.
     const permission = permissions[slugify(label)];
-    // Grant access if the permission is explicitly true or if it's an object (implying granular sub-permissions).
-    return permission === true || (typeof permission === 'object' && permission !== null);
+    if (permission === true || (typeof permission === 'object' && permission !== null)) {
+      return true;
+    }
+    
+    // Also, check if any of the submodules belong to this main module, just in case
+    // permissions are granted at a submodule level but not main module level.
+    const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
+    if(hasSubmodulesForModule && permission) return true;
+
+    return false;
   }
 
   const memoizedNavItems = useMemo(() => {
