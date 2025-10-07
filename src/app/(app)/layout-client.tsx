@@ -130,7 +130,7 @@ export function AppLayoutClient({
 
 
   const activeLicenseQuery = useMemoFirebase(() => {
-    if (!user) {
+    if (!firestore || !user) {
       return null;
     }
     return query(

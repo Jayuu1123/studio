@@ -28,22 +28,23 @@ import {
 } from '@/components/ui/table';
 import { Overview } from '@/components/dashboard/overview';
 import { RecentSales } from '@/components/dashboard/recent-sales';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, orderBy, limit, where } from 'firebase/firestore';
-import type { Order, User, Customer } from '@/lib/types';
+import type { Order, Customer } from '@/lib/types';
 import { useMemo } from 'react';
 
 export default function DashboardPage() {
   const firestore = useFirestore();
+  const { user } = useUser();
 
   const ordersQuery = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'orders') : null),
-    [firestore]
+    () => (firestore && user ? collection(firestore, 'orders') : null),
+    [firestore, user]
   );
   
   const recentOrdersQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'orders'), orderBy('orderDate', 'desc'), limit(5)) : null),
-    [firestore]
+    () => (firestore && user ? query(collection(firestore, 'orders'), orderBy('orderDate', 'desc'), limit(5)) : null),
+    [firestore, user]
   );
 
   const { data: orders, isLoading: isLoadingOrders } = useCollection<Order>(ordersQuery);
@@ -57,9 +58,9 @@ export default function DashboardPage() {
   }, [recentOrders]);
 
   const customersQuery = useMemoFirebase(() => {
-    if (!firestore || recentCustomerIds.length === 0) return null;
+    if (!firestore || !user || recentCustomerIds.length === 0) return null;
     return query(collection(firestore, 'customers'), where('__name__', 'in', recentCustomerIds));
-  }, [firestore, recentCustomerIds]);
+  }, [firestore, user, recentCustomerIds]);
 
   const { data: customers, isLoading: isLoadingCustomers } = useCollection<Customer>(customersQuery);
 
