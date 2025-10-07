@@ -96,7 +96,6 @@ export function AppLayoutClient({
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
   const submodulesQuery = useMemoFirebase(() => {
-    // IMPORTANT: Only run this query after we have a user.
     if (!firestore || isUserLoading) {
       return null;
     }
