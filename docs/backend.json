@@ -1,5 +1,4 @@
 {
-{
   "entities": {
     "AppSubmodule": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -57,7 +56,13 @@
         },
         "status": {
           "type": "string",
-          "enum": ["A", "D", "L", "P", "DR"],
+          "enum": [
+            "A",
+            "D",
+            "L",
+            "P",
+            "DR"
+          ],
           "description": "The status of the entry (Approved, Denied, Locked, Pending/Draft)."
         },
         "user": {
@@ -73,9 +78,9 @@
           "description": "The sequential part of the document number for sorting and generation."
         },
         "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Timestamp when the entry was created."
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the entry was created."
         },
         "customFields": {
           "type": "object",
@@ -83,12 +88,12 @@
           "additionalProperties": true
         },
         "lineItems": {
-            "type": "array",
-            "description": "An array of line item objects for the detail grid.",
-            "items": {
-                "type": "object",
-                "additionalProperties": true
-            }
+          "type": "array",
+          "description": "An array of line item objects for the detail grid.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
         }
       },
       "required": [
@@ -160,7 +165,10 @@
         },
         "section": {
           "type": "string",
-          "enum": ["header", "detail"],
+          "enum": [
+            "header",
+            "detail"
+          ],
           "description": "The section of the form where the field will be displayed."
         }
       },
@@ -377,9 +385,12 @@
           }
         },
         "status": {
-            "type": "string",
-            "enum": ["active", "disabled"],
-            "description": "The current status of the user account."
+          "type": "string",
+          "enum": [
+            "active",
+            "disabled"
+          ],
+          "description": "The current status of the user account."
         },
         "sessionId": {
           "type": "string",
@@ -1042,7 +1053,11 @@
         },
         "status": {
           "type": "string",
-          "enum": ["active", "inactive", "expired"],
+          "enum": [
+            "active",
+            "inactive",
+            "expired"
+          ],
           "description": "The current status of the license."
         },
         "createdAt": {
@@ -1532,5 +1547,3 @@
     ]
   }
 }
-
-    

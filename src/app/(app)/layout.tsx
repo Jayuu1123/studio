@@ -112,15 +112,19 @@ export default function AppLayout({
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
-   useEffect(() => {
-    // Simulate server-side fetch on mount
-    if (firestore) {
-      getSubmodules(firestore).then(data => {
-        setSubmodules(data);
-        setIsLoadingSubmodules(false);
-      });
-    }
+  const submodulesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
   }, [firestore]);
+
+  const { data: fetchedSubmodules, isLoading: isLoadingFetchedSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
+
+  useEffect(() => {
+      if (!isLoadingFetchedSubmodules) {
+          setSubmodules(fetchedSubmodules || []);
+          setIsLoadingSubmodules(false);
+      }
+  }, [fetchedSubmodules, isLoadingFetchedSubmodules]);
 
 
   useEffect(() => {
