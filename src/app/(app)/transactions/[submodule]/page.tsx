@@ -39,7 +39,7 @@ import { unslugify, slugify } from '@/lib/utils';
 import type { TransactionEntry, PermissionSet, AppSubmodule } from '@/lib/types';
 import Link from 'next/link';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, where, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
@@ -71,6 +71,7 @@ export default function TransactionSubmodulePage({ permissions }: TransactionSub
   const firestore = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useUser();
 
   const entriesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -89,21 +90,23 @@ export default function TransactionSubmodulePage({ permissions }: TransactionSub
 
   const canDelete = useMemo(() => {
       if (!permissions || !currentSubmodule) return false;
+      if (user?.email === 'sa@admin.com') return true;
       if (permissions.all) return true;
       const mainModuleSlug = slugify(currentSubmodule.mainModule);
       const subSlug = slugify(currentSubmodule.name);
       // @ts-ignore
       return permissions[mainModuleSlug]?.[subSlug]?.delete;
-  }, [permissions, currentSubmodule]);
+  }, [permissions, currentSubmodule, user]);
   
   const canWrite = useMemo(() => {
       if (!permissions || !currentSubmodule) return false;
+      if (user?.email === 'sa@admin.com') return true;
       if (permissions.all) return true;
       const mainModuleSlug = slugify(currentSubmodule.mainModule);
       const subSlug = slugify(currentSubmodule.name);
       // @ts-ignore
       return permissions[mainModuleSlug]?.[subSlug]?.write;
-  }, [permissions, currentSubmodule]);
+  }, [permissions, currentSubmodule, user]);
 
 
   const handleDeleteEntry = (entryId: string) => {
