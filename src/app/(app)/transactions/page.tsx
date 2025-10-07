@@ -5,14 +5,17 @@ import type { AppSubmodule } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Loader2 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, orderBy } from 'firebase/firestore';
+import { collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 
 export default function TransactionsPage() {
   const firestore = useFirestore();
   const { user } = useUser();
+  const { toast } = useToast();
 
   const submodulesQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -45,6 +48,55 @@ export default function TransactionsPage() {
     return [...new Set(order)];
   }, [transactionSubmodules]);
 
+  const handleMoveGroup = async (groupName: string, direction: 'up' | 'down') => {
+    if (!firestore || !submodules) return;
+
+    const currentGroupIndex = groupOrder.indexOf(groupName);
+    const targetGroupIndex = direction === 'up' ? currentGroupIndex - 1 : currentGroupIndex + 1;
+
+    if (targetGroupIndex < 0 || targetGroupIndex >= groupOrder.length) {
+      return; // Can't move
+    }
+
+    const targetGroupName = groupOrder[targetGroupIndex];
+
+    const currentGroupItems = groupedSubmodules[groupName].sort((a, b) => a.position - b.position);
+    const targetGroupItems = groupedSubmodules[targetGroupName].sort((a, b) => a.position - b.position);
+
+    // Get the full range of positions to swap
+    const allItemsToUpdate = [...currentGroupItems, ...targetGroupItems];
+    const originalPositions = allItemsToUpdate.map(item => item.position).sort((a, b) => a - b);
+    
+    // The new arrangement will be the target group items followed by the current group items (if moving down), or vice versa
+    const newArrangement = direction === 'down' 
+      ? [...targetGroupItems, ...currentGroupItems]
+      : [...currentGroupItems, ...targetGroupItems];
+
+    try {
+        const batch = writeBatch(firestore);
+        
+        newArrangement.forEach((item, index) => {
+            const docRef = doc(firestore, 'appSubmodules', item.id!);
+            batch.update(docRef, { position: originalPositions[index] });
+        });
+
+        await batch.commit();
+
+        toast({
+            title: "Group Reordered",
+            description: `The '${groupName}' group has been moved.`,
+        });
+
+    } catch (error) {
+        console.error("Error reordering group:", error);
+        toast({
+            variant: 'destructive',
+            title: "Reorder Failed",
+            description: "Could not reorder the group. Please try again.",
+        });
+    }
+  }
+
 
   return (
     <div className="space-y-8">
@@ -63,9 +115,19 @@ export default function TransactionsPage() {
 
       {!isLoadingSubmodules && transactionSubmodules && transactionSubmodules.length > 0 ? (
         <div className="space-y-8">
-          {groupOrder.map(groupName => (
+          {groupOrder.map((groupName, index) => (
             <div key={groupName}>
-              <h2 className="text-2xl font-semibold mb-4 font-headline">{groupName}</h2>
+              <div className="flex items-center mb-4 gap-2">
+                <h2 className="text-2xl font-semibold font-headline">{groupName}</h2>
+                 <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => handleMoveGroup(groupName, 'up')} disabled={index === 0}>
+                        <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleMoveGroup(groupName, 'down')} disabled={index === groupOrder.length - 1}>
+                        <ArrowDown className="h-4 w-4" />
+                    </Button>
+                </div>
+              </div>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {groupedSubmodules[groupName]
                   // Secondary sort by position within the group on the client-side
