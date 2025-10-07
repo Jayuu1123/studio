@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { MoreHorizontal, ArrowUp, ArrowDown } from "lucide-react";
+import { MoreHorizontal, ArrowUp, ArrowDown, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -19,11 +19,12 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useState } from "react";
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase";
-import { addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { collection, serverTimestamp, doc, query, orderBy, getDocs, writeBatch, where } from "firebase/firestore";
 import type { AppSubmodule } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { addDoc } from "firebase/firestore";
 
 
 export default function FormSettingPage() {
@@ -46,7 +47,7 @@ export default function FormSettingPage() {
 
     const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
 
-    const handleCreateSubmodule = () => {
+    const handleCreateSubmodule = async () => {
         if (!mainModule || !submoduleName || !groupName) {
             toast({
                 variant: 'destructive',
@@ -76,7 +77,7 @@ export default function FormSettingPage() {
         };
 
         const submodulesCollection = collection(firestore, 'appSubmodules');
-        addDocumentNonBlocking(submodulesCollection, newSubmodule);
+        await addDoc(submodulesCollection, newSubmodule);
 
         toast({
             title: "Submodule Created",
@@ -286,7 +287,10 @@ export default function FormSettingPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem>Edit</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => confirmDeleteSubmodule(sub)} className="text-red-500 focus:text-red-500 focus:bg-red-50">Delete</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => confirmDeleteSubmodule(sub)} className="text-red-500 focus:text-red-500 focus:bg-red-50">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -391,3 +395,5 @@ export default function FormSettingPage() {
     </>
   );
 }
+
+    
