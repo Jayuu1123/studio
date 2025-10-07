@@ -44,10 +44,11 @@ const navItems = [
 
 export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet | null, submodules: AppSubmodule[] }) {
   const pathname = usePathname();
+  const { user } = useUser();
   
   const hasAccess = (label: string) => {
-    if (permissions === null) {
-      return false; // Don't render anything if permissions are not loaded
+    if (permissions === null || !user) {
+      return false; // Don't render anything if permissions or user are not loaded
     }
     if (permissions.all) {
       return true;
@@ -67,9 +68,9 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
 
 
   const memoizedNavItems = useMemo(() => {
-    if (!permissions) return [];
+    if (!permissions || !user) return [];
     return navItems.filter(item => hasAccess(item.label));
-  }, [permissions, submodules]);
+  }, [permissions, submodules, user]);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
@@ -80,7 +81,7 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
+            viewBox="0 0 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
