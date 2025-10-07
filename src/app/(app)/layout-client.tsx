@@ -93,7 +93,6 @@ export function AppLayoutClient({
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
   const submodulesQuery = useMemoFirebase(() => {
-    // CRITICAL FIX: Do not query until auth state is resolved.
     if (!firestore || isUserLoading) return null;
     return query(collection(firestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
   }, [firestore, isUserLoading]);
@@ -175,6 +174,12 @@ export function AppLayoutClient({
 
     }, [userData, auth, toast, router]);
 
+    useEffect(() => {
+        if (!isUserLoading && !user) {
+            router.push('/');
+        }
+    }, [isUserLoading, user, router]);
+
   useEffect(() => {
     const setupAdmin = async () => {
         if (!auth || !firestore) return;
@@ -201,20 +206,18 @@ export function AppLayoutClient({
             });
 
         } catch (error: any) {
-            // We expect 'email-already-in-use', which is fine. Log other errors.
             if (error.code !== 'auth/email-already-in-use') {
                 console.error("Failed to set up admin user:", error);
             }
         }
     };
     
-    // Only run setup if no user is logged in, to avoid trying to create admin on every load
     if (!user && !isUserLoading) {
         setupAdmin();
     }
   }, [auth, firestore, user, isUserLoading]);
   
-  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
+  const isAppLoading = isUserLoading || !user || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
   const isSettingsPath = pathname.startsWith('/settings');
   const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
   
