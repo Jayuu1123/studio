@@ -7,10 +7,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MoreHorizontal, ArrowUp, ArrowDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useState } from "react";
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
-import { collection, serverTimestamp, doc, query, orderBy } from "firebase/firestore";
+import { collection, serverTimestamp, doc, query, orderBy, getDocs, writeBatch, where } from "firebase/firestore";
 import type { AppSubmodule } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -21,6 +31,9 @@ export default function FormSettingPage() {
     const [submoduleName, setSubmoduleName] = useState('');
     const [groupName, setGroupName] = useState('');
     const [selectedSubmodule, setSelectedSubmodule] = useState('');
+    const [submoduleToDelete, setSubmoduleToDelete] = useState<AppSubmodule | null>(null);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
     const firestore = useFirestore();
     const { toast } = useToast();
     const router = useRouter();
@@ -76,15 +89,60 @@ export default function FormSettingPage() {
         setGroupName('');
     };
     
-    const handleDeleteSubmodule = (id: string) => {
-        if(!firestore) return;
-        const docRef = doc(firestore, 'appSubmodules', id);
-        deleteDocumentNonBlocking(docRef);
-        toast({
-            title: "Submodule Deleted",
-            description: "The submodule has been successfully deleted.",
-        });
-    }
+    const confirmDeleteSubmodule = (submodule: AppSubmodule) => {
+        setSubmoduleToDelete(submodule);
+        setIsDeleteDialogOpen(true);
+    };
+
+    const handleDeleteSubmodule = async () => {
+        if (!firestore || !submoduleToDelete || !submoduleToDelete.id) return;
+        
+        const submoduleId = submoduleToDelete.id;
+        const submodDocRef = doc(firestore, 'appSubmodules', submoduleId);
+
+        try {
+            // Create a batch to delete the submodule and all its related fields
+            const batch = writeBatch(firestore);
+
+            // 1. Delete the submodule document itself
+            batch.delete(submodDocRef);
+
+            // 2. Find and delete all associated form fields
+            const fieldsQuery = query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'));
+            const fieldsSnapshot = await getDocs(fieldsQuery);
+            fieldsSnapshot.forEach(fieldDoc => {
+                batch.delete(fieldDoc.ref);
+            });
+            
+            // 3. Find and delete all associated transaction entries
+            const entriesQuery = query(collection(firestore, 'transactionEntries'), where('submodule', '==', submoduleToDelete.name));
+            const entriesSnapshot = await getDocs(entriesQuery);
+            entriesSnapshot.forEach(entryDoc => {
+                batch.delete(entryDoc.ref);
+            });
+
+
+            // Commit the batch
+            await batch.commit();
+
+            toast({
+                title: "Submodule Deleted",
+                description: `The submodule '${submoduleToDelete.name}' and all its associated data have been successfully deleted.`,
+            });
+
+        } catch (error) {
+            console.error("Error deleting submodule:", error);
+            toast({
+                variant: 'destructive',
+                title: "Deletion Failed",
+                description: "Could not delete the submodule. Please try again.",
+            });
+        } finally {
+            // Close the dialog and reset state
+            setIsDeleteDialogOpen(false);
+            setSubmoduleToDelete(null);
+        }
+    };
 
     const handleMove = (currentIndex: number, direction: 'up' | 'down') => {
         if (!firestore || !submodules) return;
@@ -126,6 +184,7 @@ export default function FormSettingPage() {
     }
 
   return (
+    <>
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Form Setting</h1>
       <p className="text-muted-foreground">
@@ -227,7 +286,7 @@ export default function FormSettingPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem>Edit</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => sub.id && handleDeleteSubmodule(sub.id)} className="text-red-500">Delete</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => confirmDeleteSubmodule(sub)} className="text-red-500 focus:text-red-500 focus:bg-red-50">Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -308,5 +367,27 @@ export default function FormSettingPage() {
         </Card>
       </div>
     </div>
+    <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the submodule
+                <span className="font-bold"> {submoduleToDelete?.name}</span>, all of its associated form fields,
+                and all transaction entries created under it.
+            </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+                onClick={handleDeleteSubmodule}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+                Delete
+            </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
