@@ -1,13 +1,12 @@
-
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Nav } from '@/components/nav';
 import { Header } from '@/components/header';
 import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { initiateAnonymousSignIn } from '@/firebase/non-blocking-login';
-import { doc, setDoc, getDoc, collection, query, where, Timestamp, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, Timestamp, getDocs, orderBy } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import type { License, User, Role, PermissionSet } from '@/lib/types';
+import type { License, User, Role, PermissionSet, AppSubmodule } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ShieldAlert, UserX, Loader2 } from 'lucide-react';
@@ -93,6 +92,13 @@ export default function AppLayout({
   }, [firestore, userRoles]);
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
+
+  const submodulesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+  }, [firestore]);
+
+  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
 
   useEffect(() => {
@@ -225,7 +231,7 @@ export default function AppLayout({
   }, [auth, user, isUserLoading]);
 
   // The main loading gate. Do not render children until all data is ready.
-  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null;
+  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
 
   if (isAppLoading) {
     return (
@@ -252,9 +258,9 @@ export default function AppLayout({
 
   return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
-            <Nav isLicensed={isLicensed} permissions={permissions} />
+            <Nav isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
             <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
-                <Header isLicensed={isLicensed} permissions={permissions} />
+                <Header isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
                 <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 relative">
                     {shouldShowWall && <LicenseWall />}
                     <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>

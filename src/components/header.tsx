@@ -32,7 +32,8 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { TransactionCodeSearch } from './transaction-code-search';
 import { UserNav } from './user-nav';
 import { cn, slugify } from '@/lib/utils';
-import type { PermissionSet } from '@/lib/types';
+import type { PermissionSet, AppSubmodule } from '@/lib/types';
+import { useUser } from '@/firebase';
 
 const mobileNavItems = [
     { href: '/dashboard', icon: Home, label: 'Dashboard' },
@@ -103,11 +104,17 @@ function BreadcrumbNav() {
 }
 
 
-export function Header({ isLicensed, permissions }: { isLicensed: boolean | null, permissions: PermissionSet }) {
+export function Header({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet, submodules: AppSubmodule[] }) {
   const pathname = usePathname();
+  const { user } = useUser();
   
   const hasAccess = (label: string) => {
+    if (user?.email === 'sa@admin.com') return true;
     if (permissions.all) return true;
+
+    const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
+    if (!hasSubmodulesForModule && !['Dashboard', 'Form Setting', 'Settings'].includes(label)) return false;
+
     const permission = permissions[slugify(label)];
     // Grant access if the permission is explicitly true or if it's an object (implying granular sub-permissions).
     return permission === true || (typeof permission === 'object' && permission !== null);
