@@ -27,7 +27,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
 import {
   addDocumentNonBlocking,
   deleteDocumentNonBlocking,
@@ -42,13 +42,14 @@ export default function RolesPage() {
   const [roleName, setRoleName] = useState('');
   const [roleDescription, setRoleDescription] = useState('');
   const firestore = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
 
   const rolesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || !user) return null;
     return collection(firestore, 'roles');
-  }, [firestore]);
+  }, [firestore, user]);
 
   const { data: roles, isLoading } = useCollection<Role>(rolesQuery);
 

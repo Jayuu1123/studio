@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase";
 import { setDoc, doc, collection, updateDoc } from "firebase/firestore";
 import type { Role, User } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -28,6 +28,7 @@ interface AddUserDialogProps {
 export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogProps) {
   const { toast } = useToast();
   const firestore = useFirestore();
+  const { user } = useUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -51,9 +52,9 @@ export function AddUserDialog({ isOpen, setIsOpen, userToEdit }: AddUserDialogPr
   }, [userToEdit, isEditMode, isOpen]);
   
   const rolesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || !user) return null;
     return collection(firestore, 'roles');
-  }, [firestore]);
+  }, [firestore, user]);
 
   const { data: roles } = useCollection<Role>(rolesQuery);
 
