@@ -47,39 +47,35 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
   
   const hasAccess = (label: string) => {
     if (permissions === null) {
-      return ['Dashboard', 'Settings'].includes(label);
+      return true; // Defer to server-side or initial state
     }
 
+    // Super admin has access to everything, always.
     if (permissions.all) {
       return true;
     }
-
+    
     // Always show Dashboard and settings-related pages
     if (['Dashboard', 'Form Setting', 'Settings'].includes(label)) {
       return true;
     }
-    
-    // Check for direct permission for the main module.
+
     const mainModuleSlug = slugify(label);
     const mainModulePermission = permissions[mainModuleSlug];
-    if (mainModulePermission === true || (typeof mainModulePermission === 'object' && Object.keys(mainModulePermission).length > 0)) {
-        return true;
+
+    // Case 1: Direct permission for the main module (e.g., "sales": true)
+    if (mainModulePermission === true) {
+      return true;
     }
 
-    // If no direct permission, check if there's permission for any submodule under this main module.
-    const hasSubmoduleAccess = submodules.some(sub => {
-      if (sub.mainModule === label) {
-        const subModuleSlug = slugify(sub.name);
-        // @ts-ignore
-        if (mainModulePermission && typeof mainModulePermission === 'object' && mainModulePermission[subModuleSlug]) {
-          return true;
-        }
-      }
-      return false;
-    });
+    // Case 2: Granular permissions exist for submodules within the main module
+    if (typeof mainModulePermission === 'object' && mainModulePermission !== null && Object.keys(mainModulePermission).length > 0) {
+      return true;
+    }
 
-    return hasSubmoduleAccess;
+    return false;
   }
+
 
   const memoizedNavItems = useMemo(() => {
     if (!permissions || !submodules) return [];
