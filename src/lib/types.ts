@@ -93,10 +93,15 @@ export type AppSubmodule = {
 export type FormField = {
   id?: string;
   formDefinitionId: string; // Corresponds to submoduleId
-  name: string;
+  key: string; // e.g., 'project_name'
+  label: string; // e.g., 'Project Name'
   type: string; // e.g., 'text', 'number', 'date', 'boolean', 'select'
-  section: 'header' | 'detail'; // Defines where the field appears
-}
+  section: 'header' | 'detail';
+  required?: boolean;
+  placeholder?: string;
+  position: number;
+};
+
 
 export type Order = {
     id: string;

@@ -2,19 +2,20 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, FileText, MoreHorizontal, PlusCircle, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ChevronLeft, FileText, PlusCircle, Trash2, Save } from "lucide-react";
+import { useState, useMemo } from "react";
 import { useFirestore, useDoc, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, doc, query, where } from "firebase/firestore";
-import { addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { collection, doc, query, where, writeBatch, orderBy } from "firebase/firestore";
+import { addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import type { AppSubmodule, FormField } from "@/lib/types";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { FormSettingSidebar } from "@/components/settings/form-setting-sidebar";
 import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
+import { slugify } from "@/lib/utils";
 
 export default function HeaderFormPage() {
     const params = useParams();
@@ -22,8 +23,7 @@ export default function HeaderFormPage() {
     const { toast } = useToast();
     const submoduleId = params.submoduleId as string;
 
-    const [newFieldName, setNewFieldName] = useState('');
-    const [newFieldType, setNewFieldType] = useState('');
+    const [fields, setFields] = useState<FormField[]>([]);
 
     const submoduleRef = useMemoFirebase(() => {
         if (!firestore || !submoduleId) return null;
@@ -36,49 +36,92 @@ export default function HeaderFormPage() {
         if (!firestore || !submoduleId) return null;
         return query(
             collection(firestore, 'appSubmodules', submoduleId, 'formFields'),
-            where('section', '==', 'header')
+            where('section', '==', 'header'),
+            orderBy('position')
         );
     }, [firestore, submoduleId]);
 
     const { data: headerFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
+    
+    useMemo(() => {
+        if (headerFields) {
+            setFields(headerFields);
+        }
+    }, [headerFields]);
+
+    const handleFieldChange = (index: number, prop: keyof FormField, value: any) => {
+        const newFields = [...fields];
+        if (prop === 'label' && !newFields[index].key) {
+            newFields[index].key = slugify(value);
+        }
+        // @ts-ignore
+        newFields[index][prop] = value;
+        setFields(newFields);
+    };
 
     const handleAddField = () => {
-        if (!newFieldName || !newFieldType) {
+        const newPosition = fields.length > 0 ? Math.max(...fields.map(f => f.position)) + 1 : 1;
+        setFields([...fields, {
+            formDefinitionId: submoduleId,
+            key: '',
+            label: '',
+            type: 'text',
+            section: 'header',
+            position: newPosition,
+            required: false,
+            placeholder: ''
+        }]);
+    };
+    
+    const handleSaveField = async (index: number) => {
+        if (!firestore || !submoduleId) return;
+        const field = fields[index];
+        if (!field.key || !field.label) {
             toast({
                 variant: 'destructive',
-                title: "Missing Information",
-                description: "Please provide both a field name and type.",
+                title: "Validation Error",
+                description: "Field Key and Label are required.",
             });
             return;
         }
 
-        if (!firestore || !submoduleId) return;
-
         const fieldsCollection = collection(firestore, 'appSubmodules', submoduleId, 'formFields');
-        const newField: Omit<FormField, 'id'> = {
-            formDefinitionId: submoduleId,
-            name: newFieldName,
-            type: newFieldType,
-            section: 'header',
-        };
-
-        addDocumentNonBlocking(fieldsCollection, newField);
-        toast({
-            title: "Field Added",
-            description: `Field '${newFieldName}' has been added to the header.`,
-        });
-
-        setNewFieldName('');
-        setNewFieldType('');
+        
+        if (field.id) {
+            // Update existing field
+            const fieldDocRef = doc(fieldsCollection, field.id);
+            await setDocumentNonBlocking(fieldDocRef, field, { merge: true });
+             toast({
+                title: "Field Updated",
+                description: `Field '${field.label}' has been updated.`,
+            });
+        } else {
+            // Create new field
+            const docRef = await addDocumentNonBlocking(fieldsCollection, field);
+            if(docRef) {
+                const newFields = [...fields];
+                newFields[index].id = docRef.id;
+                setFields(newFields);
+            }
+             toast({
+                title: "Field Created",
+                description: `Field '${field.label}' has been created.`,
+            });
+        }
     };
-    
-    const handleDeleteField = (fieldId: string) => {
+
+    const handleDeleteField = (index: number) => {
         if (!firestore || !submoduleId) return;
-        const fieldDocRef = doc(firestore, 'appSubmodules', submoduleId, 'formFields', fieldId);
-        deleteDocumentNonBlocking(fieldDocRef);
+        const field = fields[index];
+        if (field.id) {
+            const fieldDocRef = doc(firestore, 'appSubmodules', submoduleId, 'formFields', field.id);
+            deleteDocumentNonBlocking(fieldDocRef);
+        }
+        const newFields = fields.filter((_, i) => i !== index);
+        setFields(newFields);
         toast({
-             title: "Field Deleted",
-             description: "The field has been removed.",
+             title: "Field Removed",
+             description: "The field has been removed from the UI. Save to commit changes.",
         })
     }
 
@@ -112,66 +155,69 @@ export default function HeaderFormPage() {
                     <h1 className="text-2xl font-bold font-headline">Define Header Fields</h1>
                 </div>
 
-                <Card>
+                 <Card>
                     <CardHeader>
-                        <CardTitle>Add New Field</CardTitle>
-                        <CardDescription>Add fields that will appear at the top of the entry form.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid md:grid-cols-3 gap-4">
-                         <div className="space-y-2">
-                            <Label htmlFor="field-name">Field Name</Label>
-                            <Input id="field-name" value={newFieldName} onChange={(e) => setNewFieldName(e.target.value)} placeholder="e.g. Project Name" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="field-type">Field Type</Label>
-                             <Select value={newFieldType} onValueChange={setNewFieldType}>
-                                <SelectTrigger id="field-type">
-                                    <SelectValue placeholder="Select a type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="text">Text</SelectItem>
-                                    <SelectItem value="number">Number</SelectItem>
-                                    <SelectItem value="date">Date</SelectItem>
-                                    <SelectItem value="boolean">Checkbox</SelectItem>
-                                    <SelectItem value="select">Select</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="flex items-end">
-                             <Button onClick={handleAddField}>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle>Manage Header Fields</CardTitle>
+                                <CardDescription>Add, edit, and reorder fields for the form's header section.</CardDescription>
+                            </div>
+                            <Button onClick={handleAddField}>
                                 <PlusCircle className="mr-2 h-4 w-4" /> Add Field
                             </Button>
                         </div>
-                    </CardContent>
-                </Card>
-
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Existing Header Fields</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Field Name</TableHead>
-                                    <TableHead>Field Type</TableHead>
-                                    <TableHead className="w-16"><span className="sr-only">Actions</span></TableHead>
+                                    <TableHead>Field Key</TableHead>
+                                    <TableHead>Label</TableHead>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Required</TableHead>
+                                    <TableHead>Placeholder</TableHead>
+                                    <TableHead className="w-28 text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {isLoadingFields && <TableRow><TableCell colSpan={3} className="text-center">Loading fields...</TableCell></TableRow>}
-                                {headerFields?.map(field => (
-                                    <TableRow key={field.id}>
-                                        <TableCell>{field.name}</TableCell>
-                                        <TableCell className="capitalize">{field.type}</TableCell>
+                                {isLoadingFields && <TableRow><TableCell colSpan={6} className="text-center">Loading fields...</TableCell></TableRow>}
+                                {fields.map((field, index) => (
+                                    <TableRow key={index}>
                                         <TableCell>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDeleteField(field.id!)}>
+                                            <Input value={field.key} onChange={e => handleFieldChange(index, 'key', e.target.value)} placeholder="e.g., project_name" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input value={field.label} onChange={e => handleFieldChange(index, 'label', e.target.value)} placeholder="e.g., Project Name" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Select value={field.type} onValueChange={v => handleFieldChange(index, 'type', v)}>
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="text">Text</SelectItem>
+                                                    <SelectItem value="number">Number</SelectItem>
+                                                    <SelectItem value="date">Date</SelectItem>
+                                                    <SelectItem value="boolean">Checkbox</SelectItem>
+                                                    <SelectItem value="select">Select</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <Checkbox checked={field.required} onCheckedChange={c => handleFieldChange(index, 'required', c)} />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input value={field.placeholder || ''} onChange={e => handleFieldChange(index, 'placeholder', e.target.value)} placeholder="Enter hint text" />
+                                        </TableCell>
+                                        <TableCell className="text-right space-x-1">
+                                            <Button variant="ghost" size="icon" onClick={() => handleSaveField(index)}>
+                                                <Save className="h-4 w-4 text-blue-500" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDeleteField(index)}>
                                                 <Trash2 className="h-4 w-4 text-red-500" />
                                             </Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
-                                {!isLoadingFields && !headerFields?.length && <TableRow><TableCell colSpan={3} className="text-center">No header fields defined.</TableCell></TableRow>}
+                                {!isLoadingFields && !fields?.length && <TableRow><TableCell colSpan={6} className="text-center py-8">No header fields defined. Click "Add Field" to begin.</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </CardContent>
@@ -181,3 +227,5 @@ export default function HeaderFormPage() {
         </div>
     );
 }
+
+    

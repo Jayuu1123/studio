@@ -155,9 +155,13 @@
           "type": "string",
           "description": "Reference to the AppSubmodule acting as the form definition."
         },
-        "name": {
+        "key": {
           "type": "string",
-          "description": "Name of the field."
+          "description": "The unique key for the field data (e.g., 'project_name')."
+        },
+        "label": {
+          "type": "string",
+          "description": "The user-friendly display name for the field (e.g., 'Project Name')."
         },
         "type": {
           "type": "string",
@@ -170,14 +174,27 @@
             "detail"
           ],
           "description": "The section of the form where the field will be displayed."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the field is mandatory."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Placeholder text for the input field."
+        },
+        "position": {
+          "type": "number",
+          "description": "The display order of the field within its section."
         }
       },
       "required": [
-        "id",
         "formDefinitionId",
-        "name",
+        "key",
+        "label",
         "type",
-        "section"
+        "section",
+        "position"
       ]
     },
     "LookupTable": {
@@ -1547,3 +1564,5 @@
     ]
   }
 }
+
+    
