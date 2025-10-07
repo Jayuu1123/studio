@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
 import type { AppSubmodule } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PlusCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function TransactionsPage() {
   const firestore = useFirestore();
@@ -19,35 +20,41 @@ export default function TransactionsPage() {
 
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
-  if (isLoadingSubmodules) {
-      return (
-          <div className="flex items-center justify-center h-48">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-      );
-  }
 
   return (
     <div className="space-y-6">
-      {submodules && submodules.length > 0 ? (
-        <div>
-          <h2 className="text-xl font-semibold mb-3 text-muted-foreground">
-            Transactions
-          </h2>
+        <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold font-headline">Transactions</h1>
+            <Button asChild>
+                <Link href="/form-setting">
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Create Submodule
+                </Link>
+            </Button>
+        </div>
+
+      {isLoadingSubmodules && (
+          <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+      )}
+
+      {!isLoadingSubmodules && submodules && submodules.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {submodules.map((submodule) => (
               <SubmoduleCard key={submodule.id} submodule={submodule} />
             ))}
           </div>
-        </div>
-      ) : (
+      ) : null}
+
+      {!isLoadingSubmodules && (!submodules || submodules.length === 0) && (
           <Card>
             <CardHeader>
               <CardTitle>No Transaction Submodules Found</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground">
-                No submodules have been created for the Transactions module yet. You can <Link href="/form-setting" className='text-primary underline'>create one now</Link>.
+                No submodules have been created for the Transactions module yet. You can create one now using the button above.
               </p>
             </CardContent>
           </Card>
