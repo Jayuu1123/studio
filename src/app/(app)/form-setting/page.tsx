@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase";
 import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { collection, serverTimestamp, doc, query, orderBy, getDocs, writeBatch, where } from "firebase/firestore";
@@ -333,8 +333,8 @@ export default function FormSettingPage() {
                     </TableRow>
                 )}
                 {!isLoading && groupOrder.map((group, groupIndex) => (
-                    <>
-                        <TableRow key={`group-${group}`} className="bg-muted/50 hover:bg-muted/50">
+                    <React.Fragment key={group}>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
                             <TableCell colSpan={2} className="font-bold">
                                 {group}
                             </TableCell>
@@ -380,7 +380,7 @@ export default function FormSettingPage() {
                                 </TableCell>
                             </TableRow>
                         ))}
-                    </>
+                    </React.Fragment>
                 ))}
                 {!isLoading && (!submodules || submodules.length === 0) && (
                      <TableRow>
