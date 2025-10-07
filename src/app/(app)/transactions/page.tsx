@@ -1,10 +1,9 @@
-
 'use client';
 
 import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import type { AppSubmodule, PermissionSet } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,18 +15,18 @@ export default function TransactionsPage({ permissions }: { permissions: Permiss
 
   const submodulesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'appSubmodules'));
+    // Query directly for transaction submodules
+    return query(collection(firestore, 'appSubmodules'), where('mainModule', '==', 'Transactions'));
   }, [firestore]);
 
   const { data: allSubmodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
   
   const filteredSubmodules = useMemo(() => {
     if (!allSubmodules || !permissions) return [];
-
-    const transactionSubmodules = allSubmodules.filter(sub => sub.mainModule === 'Transactions');
-
+    
+    // If user has all permissions, no further filtering is needed
     if (permissions.all) {
-      return transactionSubmodules;
+      return allSubmodules;
     }
     
     // @ts-ignore
@@ -36,7 +35,8 @@ export default function TransactionsPage({ permissions }: { permissions: Permiss
         return [];
     }
 
-    return transactionSubmodules.filter(sub => {
+    // Filter based on specific read permissions for each submodule
+    return allSubmodules.filter(sub => {
         const subSlug = slugify(sub.name);
         // @ts-ignore
         return transactionPermissions[subSlug]?.read;
