@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 export default function FormSettingPage() {
     const [mainModule, setMainModule] = useState('');
     const [submoduleName, setSubmoduleName] = useState('');
+    const [groupName, setGroupName] = useState('');
     const [selectedSubmodule, setSelectedSubmodule] = useState('');
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -32,11 +33,11 @@ export default function FormSettingPage() {
     const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
 
     const handleCreateSubmodule = () => {
-        if (!mainModule || !submoduleName) {
+        if (!mainModule || !submoduleName || !groupName) {
             toast({
                 variant: 'destructive',
                 title: "Missing Information",
-                description: "Please select a main module and provide a submodule name.",
+                description: "Please select a main module, provide a submodule name, and specify a group.",
             });
             return;
         }
@@ -55,6 +56,7 @@ export default function FormSettingPage() {
         const newSubmodule: Omit<AppSubmodule, 'id'> = {
             name: submoduleName,
             mainModule: mainModule,
+            group: groupName,
             createdAt: serverTimestamp(),
             position: newPosition,
         };
@@ -64,12 +66,13 @@ export default function FormSettingPage() {
 
         toast({
             title: "Submodule Created",
-            description: `'${submoduleName}' has been added to the '${mainModule}' module.`,
+            description: `'${submoduleName}' has been added to the '${mainModule}' module under the '${groupName}' group.`,
         });
 
         // Reset form
         setMainModule('');
         setSubmoduleName('');
+        setGroupName('');
     };
     
     const handleDeleteSubmodule = (id: string) => {
@@ -133,7 +136,7 @@ export default function FormSettingPage() {
         <Card>
           <CardHeader>
             <CardTitle>Create New Submodule</CardTitle>
-            <CardDescription>Add a new submodule to an existing main module.</CardDescription>
+            <CardDescription>Add a new submodule to an existing main module and group.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -153,10 +156,19 @@ export default function FormSettingPage() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="group-name">Group Name</Label>
+              <Input 
+                id="group-name" 
+                placeholder="e.g., 'Production', 'Store Management'"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="submodule-name">Submodule Name</Label>
               <Input 
                 id="submodule-name" 
-                placeholder="e.g., 'Invoices'"
+                placeholder="e.g., 'Invoices', 'Production Order'"
                 value={submoduleName}
                 onChange={(e) => setSubmoduleName(e.target.value)}
               />
@@ -179,6 +191,7 @@ export default function FormSettingPage() {
                 <TableRow>
                   <TableHead>Submodule Name</TableHead>
                   <TableHead>Main Module</TableHead>
+                   <TableHead>Group</TableHead>
                   <TableHead>Order</TableHead>
                   <TableHead><span className="sr-only">Actions</span></TableHead>
                 </TableRow>
@@ -186,13 +199,14 @@ export default function FormSettingPage() {
               <TableBody>
                 {isLoading && (
                     <TableRow>
-                        <TableCell colSpan={4} className="text-center">Loading submodules...</TableCell>
+                        <TableCell colSpan={5} className="text-center">Loading submodules...</TableCell>
                     </TableRow>
                 )}
                 {submodules && submodules.map((sub, index) => (
                   <TableRow key={sub.id}>
                     <TableCell className="font-medium">{sub.name}</TableCell>
                     <TableCell>{sub.mainModule}</TableCell>
+                    <TableCell>{sub.group}</TableCell>
                     <TableCell className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => handleMove(index, 'up')} disabled={index === 0}>
                             <ArrowUp className="h-4 w-4" />
@@ -220,7 +234,7 @@ export default function FormSettingPage() {
                 ))}
                 {!isLoading && (!submodules || submodules.length === 0) && (
                      <TableRow>
-                        <TableCell colSpan={4} className="text-center">No submodules found.</TableCell>
+                        <TableCell colSpan={5} className="text-center">No submodules found.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
@@ -297,3 +311,5 @@ export default function FormSettingPage() {
 }
 
   
+
+    

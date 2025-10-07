@@ -85,6 +85,7 @@ export type AppSubmodule = {
   id?: string;
   name: string;
   mainModule: string;
+  group: string;
   createdAt: any;
   position: number;
 }
@@ -117,3 +118,5 @@ export type License = {
   // We can add a field to join with the user collection for display
   userEmail?: string; 
 };
+
+    
