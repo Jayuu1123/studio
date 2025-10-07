@@ -18,6 +18,7 @@ import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebas
 import { setDoc, doc, collection, updateDoc } from "firebase/firestore";
 import type { Role, User } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { slugify } from "@/lib/utils";
 
 interface AddUserDialogProps {
   isOpen: boolean;

@@ -90,7 +90,7 @@ export function AppLayoutClient({
     if (!firestore || !user || userRoles.length === 0) {
         return null;
     }
-    return query(collection(firestore, 'roles'), where('name', 'in', userRoles));
+    return query(collection(firestore, 'roles'), where('__name__', 'in', userRoles.map(role => slugify(role)) ));
   }, [firestore, user, userRoles]);
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
@@ -114,7 +114,7 @@ export function AppLayoutClient({
       setPermissions({ all: true });
       return;
     }
-    
+
     if (roleDocs) {
       const mergedPermissions: PermissionSet = {};
       roleDocs.forEach(role => {
@@ -122,7 +122,11 @@ export function AppLayoutClient({
           Object.assign(mergedPermissions, role.permissions);
         }
       });
-      setPermissions(mergedPermissions);
+       if (Object.keys(mergedPermissions).length > 0) {
+        setPermissions(mergedPermissions);
+      } else {
+        setPermissions({});
+      }
     } else {
       setPermissions({});
     }

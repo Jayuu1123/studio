@@ -47,27 +47,19 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
   
   const hasAccess = (label: string) => {
     if (permissions === null) {
-      return true; // Defer to server-side or initial state
+      return false; // Don't render anything if permissions are not loaded
     }
-
-    // Super admin has access to everything, always.
     if (permissions.all) {
       return true;
     }
-    
-    // Always show Dashboard and settings-related pages
+    // Always show Dashboard, settings and form settings
     if (['Dashboard', 'Form Setting', 'Settings'].includes(label)) {
       return true;
     }
-
     const mainModuleSlug = slugify(label);
     const mainModulePermission = permissions[mainModuleSlug];
-
-    // Grant access if the permission exists for the main module.
-    // This can be `true` for full access or an object for granular access.
-    // The mere presence of the key indicates the user should see the parent module.
     return mainModulePermission !== undefined;
-  }
+  };
 
 
   const memoizedNavItems = useMemo(() => {
