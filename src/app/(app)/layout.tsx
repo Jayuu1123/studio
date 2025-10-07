@@ -8,7 +8,7 @@ export default function AppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  
+  console.log('--- AppLayout: Render Start ---');
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
        <AppLayoutClient>

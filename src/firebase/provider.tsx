@@ -66,19 +66,25 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     isUserLoading: true, // Start loading until first auth event
     userError: null,
   });
+  
+  console.log('--- FirebaseProvider: Render Start ---');
 
   // Effect to subscribe to Firebase auth state changes
   useEffect(() => {
+    console.log('FirebaseProvider: Auth state effect triggered.');
     if (!auth) { // If no Auth service instance, cannot determine user state
+      console.log('FirebaseProvider: No auth instance provided.');
       setUserAuthState({ user: null, isUserLoading: false, userError: new Error("Auth service not provided.") });
       return;
     }
 
+    console.log('FirebaseProvider: Setting up onAuthStateChanged listener.');
     setUserAuthState({ user: null, isUserLoading: true, userError: null }); // Reset on auth instance change
 
     const unsubscribe = onAuthStateChanged(
       auth,
       (firebaseUser) => { // Auth state determined
+        console.log(`FirebaseProvider: onAuthStateChanged fired. User is ${firebaseUser ? 'present' : 'null'}.`);
         setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
       },
       (error) => { // Auth listener error
@@ -86,7 +92,10 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
         setUserAuthState({ user: null, isUserLoading: false, userError: error });
       }
     );
-    return () => unsubscribe(); // Cleanup
+    return () => {
+        console.log('FirebaseProvider: Cleaning up onAuthStateChanged listener.');
+        unsubscribe();
+    } // Cleanup
   }, [auth]); // Depends on the auth instance
 
   // Memoize the context value

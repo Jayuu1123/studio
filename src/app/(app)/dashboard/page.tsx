@@ -33,15 +33,22 @@ import { collection, query, orderBy, limit } from 'firebase/firestore';
 import type { Order, User } from '@/lib/types';
 
 export default function DashboardPage() {
+  console.log('--- DashboardPage: Render Start ---');
   const firestore = useFirestore();
 
   const ordersQuery = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'orders') : null),
+    () => {
+      console.log('DashboardPage: Creating ordersQuery');
+      return firestore ? collection(firestore, 'orders') : null
+    },
     [firestore]
   );
   
   const recentOrdersQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'orders'), orderBy('orderDate', 'desc'), limit(5)) : null),
+    () => {
+       console.log('DashboardPage: Creating recentOrdersQuery');
+      return firestore ? query(collection(firestore, 'orders'), orderBy('orderDate', 'desc'), limit(5)) : null
+    },
     [firestore]
   );
 
@@ -51,6 +58,8 @@ export default function DashboardPage() {
 
   const totalRevenue = orders?.reduce((sum, order) => sum + order.totalAmount, 0) || 0;
   const totalSales = orders?.length || 0;
+  
+  console.log(`DashboardPage: isLoadingOrders is ${isLoadingOrders}`);
 
   return (
     <>

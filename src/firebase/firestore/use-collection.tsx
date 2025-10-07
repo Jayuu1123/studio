@@ -61,14 +61,24 @@ export function useCollection<T = any>(
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
+   const path: string | null = memoizedTargetRefOrQuery ? (
+        memoizedTargetRefOrQuery.type === 'collection'
+            ? (memoizedTargetRefOrQuery as CollectionReference).path
+            : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+    ) : null;
+    
+  console.log(`useCollection: Hook called for path: ${path || 'null'}`);
+
   useEffect(() => {
     if (!memoizedTargetRefOrQuery) {
+      console.log(`useCollection (${path}): No query provided, clearing state.`);
       setData(null);
       setIsLoading(false);
       setError(null);
       return;
     }
-
+    
+    console.log(`useCollection (${path}): Setting up snapshot listener.`);
     setIsLoading(true);
     setError(null);
 
@@ -76,6 +86,7 @@ export function useCollection<T = any>(
     const unsubscribe = onSnapshot(
       memoizedTargetRefOrQuery,
       (snapshot: QuerySnapshot<DocumentData>) => {
+        console.log(`useCollection (${path}): Snapshot received with ${snapshot.docs.length} documents.`);
         const results: ResultItemType[] = [];
         for (const doc of snapshot.docs) {
           results.push({ ...(doc.data() as T), id: doc.id });
@@ -85,15 +96,16 @@ export function useCollection<T = any>(
         setIsLoading(false);
       },
       (error: FirestoreError) => {
+        console.error(`useCollection (${path}): Snapshot error!`, error);
         // This logic extracts the path from either a ref or a query
-        const path: string =
+        const errorPath: string =
           memoizedTargetRefOrQuery.type === 'collection'
             ? (memoizedTargetRefOrQuery as CollectionReference).path
             : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
 
         const contextualError = new FirestorePermissionError({
           operation: 'list',
-          path,
+          path: errorPath,
         })
 
         setError(contextualError)
@@ -105,8 +117,12 @@ export function useCollection<T = any>(
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+        console.log(`useCollection (${path}): Unsubscribing from snapshot listener.`);
+        unsubscribe();
+    }
   }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
+  
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
   }
