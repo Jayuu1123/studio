@@ -119,18 +119,28 @@ export function Header({ isLicensed, permissions, submodules }: { isLicensed: bo
       return true;
     }
     
-    const permission = permissions[slugify(label)];
-    if (permission === true || (typeof permission === 'object' && permission !== null)) {
-      return true;
+    const mainModuleSlug = slugify(label);
+    const mainModulePermission = permissions[mainModuleSlug];
+    if (mainModulePermission === true || (typeof mainModulePermission === 'object' && Object.keys(mainModulePermission).length > 0)) {
+        return true;
     }
-    
-    const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
-    if(hasSubmodulesForModule && permission) return true;
 
-    return false;
+    const hasSubmoduleAccess = submodules.some(sub => {
+      if (sub.mainModule === label) {
+        const subModuleSlug = slugify(sub.name);
+        // @ts-ignore
+        if (mainModulePermission && typeof mainModulePermission === 'object' && mainModulePermission[subModuleSlug]) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    return hasSubmoduleAccess;
   }
 
   const memoizedMobileNavItems = useMemo(() => {
+    if (!permissions || !submodules) return [];
     return mobileNavItems.filter(item => hasAccess(item.label));
   }, [permissions, submodules]);
 

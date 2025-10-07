@@ -46,7 +46,6 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
   const pathname = usePathname();
   
   const hasAccess = (label: string) => {
-    // Before permissions are loaded, don't show anything except dashboard/settings
     if (permissions === null) {
       return ['Dashboard', 'Settings'].includes(label);
     }
@@ -60,22 +59,30 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
       return true;
     }
     
-    // For other modules, check if user has any permission for it.
-    const permission = permissions[slugify(label)];
-
-    // Grant access if permission is true, or an object (implying sub-permissions)
-    if (permission === true || (typeof permission === 'object' && permission !== null)) {
-      return true;
+    // Check for direct permission for the main module.
+    const mainModuleSlug = slugify(label);
+    const mainModulePermission = permissions[mainModuleSlug];
+    if (mainModulePermission === true || (typeof mainModulePermission === 'object' && Object.keys(mainModulePermission).length > 0)) {
+        return true;
     }
-    
-    // Fallback for dynamically created modules that might not have a top-level permission entry
-    const hasSubmodulesForModule = submodules.some(sub => sub.mainModule === label);
-    if(hasSubmodulesForModule && permission) return true;
 
-    return false;
+    // If no direct permission, check if there's permission for any submodule under this main module.
+    const hasSubmoduleAccess = submodules.some(sub => {
+      if (sub.mainModule === label) {
+        const subModuleSlug = slugify(sub.name);
+        // @ts-ignore
+        if (mainModulePermission && typeof mainModulePermission === 'object' && mainModulePermission[subModuleSlug]) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    return hasSubmoduleAccess;
   }
 
   const memoizedNavItems = useMemo(() => {
+    if (!permissions || !submodules) return [];
     return navItems.filter(item => hasAccess(item.label));
   }, [permissions, submodules]);
 
@@ -102,7 +109,7 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
         </Link>
         <TooltipProvider>
           {memoizedNavItems.map((item) => {
-            const isDisabled = isLicensed === false;
+            const isDisabled = isLicensed === false && !item.label.startsWith('Settings');
             return (
                 <Tooltip key={item.href}>
                 <TooltipTrigger asChild>
