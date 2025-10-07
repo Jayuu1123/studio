@@ -891,7 +891,7 @@
     "GoodsReceiptNote": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "GoodsReceiptNote",
-      "type": "object",
+      "type": "object",.
       "description": "Represents a goods receipt note.",
       "properties": {
         "id": {
@@ -1107,7 +1107,7 @@
     ]
   },
   "firestore": {
-    "rules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    function isAuthenticated() {\n      return request.auth != null;\n    }\n\n    match /{collectionId}/{docId} {\n      allow read, write: if isAuthenticated();\n\n      // Allow access to subcollections\n      match /{subcollectionId}/{subDocId} {\n        allow read, write: if isAuthenticated();\n      }\n    }\n  }\n}\n",
+    "rules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    function isAuthenticated() {\n      return request.auth != null;\n    }\n\n    match /{document=**} {\n      allow read, write: if isAuthenticated();\n    }\n  }\n}\n",
     "structure": [
       {
         "path": "/users/{userId}",
@@ -1564,3 +1564,4 @@
     ]
   }
 }
+    
