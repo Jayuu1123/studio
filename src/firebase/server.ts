@@ -4,13 +4,12 @@ import { initializeApp, getApps, getApp, type App } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
-function getAdminApp(): App {
-  if (getApps().length > 0) {
-    return getApp();
-  }
-  return initializeApp();
-}
+// This is the robust way to initialize the Firebase Admin SDK on the server.
+// It checks if an app is already initialized; if not, it initializes one.
+// This prevents both "app already exists" and "app does not exist" errors.
+const adminApp: App = getApps().length
+  ? getApp()
+  : initializeApp();
 
-const adminApp = getAdminApp();
 export const adminAuth = getAuth(adminApp);
 export const adminFirestore = getFirestore(adminApp);
