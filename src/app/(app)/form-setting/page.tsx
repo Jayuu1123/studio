@@ -53,6 +53,24 @@ export default function FormSettingPage() {
         const groups = submodules.map(sub => sub.group);
         return [...new Set(groups)].map(group => ({ value: group.toLowerCase(), label: group }));
     }, [submodules]);
+    
+    const groupedSubmodules = useMemo(() => {
+        if (!submodules) return {};
+        return submodules.reduce((acc, submodule) => {
+          const group = submodule.group || 'Uncategorized';
+          if (!acc[group]) {
+            acc[group] = [];
+          }
+          acc[group].push(submodule);
+          return acc;
+        }, {} as Record<string, AppSubmodule[]>);
+    }, [submodules]);
+
+    const groupOrder = useMemo(() => {
+        if (!submodules) return [];
+        const order = submodules.map(s => s.group || 'Uncategorized');
+        return [...new Set(order)];
+    }, [submodules]);
 
     const handleCreateSubmodule = async () => {
         if (!mainModule || !submoduleName || !groupName) {
@@ -109,28 +127,22 @@ export default function FormSettingPage() {
         const submodDocRef = doc(firestore, 'appSubmodules', submoduleId);
 
         try {
-            // Create a batch to delete the submodule and all its related fields
             const batch = writeBatch(firestore);
 
-            // 1. Delete the submodule document itself
             batch.delete(submodDocRef);
 
-            // 2. Find and delete all associated form fields
             const fieldsQuery = query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'));
             const fieldsSnapshot = await getDocs(fieldsQuery);
             fieldsSnapshot.forEach(fieldDoc => {
                 batch.delete(fieldDoc.ref);
             });
             
-            // 3. Find and delete all associated transaction entries
             const entriesQuery = query(collection(firestore, 'transactionEntries'), where('submodule', '==', submoduleToDelete.name));
             const entriesSnapshot = await getDocs(entriesQuery);
             entriesSnapshot.forEach(entryDoc => {
                 batch.delete(entryDoc.ref);
             });
 
-
-            // Commit the batch
             await batch.commit();
 
             toast({
@@ -146,38 +158,66 @@ export default function FormSettingPage() {
                 description: "Could not delete the submodule. Please try again.",
             });
         } finally {
-            // Close the dialog and reset state
             setIsDeleteDialogOpen(false);
             setSubmoduleToDelete(null);
         }
     };
-
-    const handleMove = (currentIndex: number, direction: 'up' | 'down') => {
+    
+    const handleMoveSubmodule = (submodulesInGroup: AppSubmodule[], currentIndex: number, direction: 'up' | 'down') => {
         if (!firestore || !submodules) return;
 
         const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        if (targetIndex < 0 || targetIndex >= submodulesInGroup.length) return;
 
-        if (targetIndex < 0 || targetIndex >= submodules.length) {
-            return; // Cannot move outside of bounds
-        }
-        
-        const currentSub = submodules[currentIndex];
-        const targetSub = submodules[targetIndex];
+        const currentSub = submodulesInGroup[currentIndex];
+        const targetSub = submodulesInGroup[targetIndex];
 
         if (!currentSub.id || !targetSub.id) return;
 
-        // Swap positions
+        const batch = writeBatch(firestore);
         const currentDocRef = doc(firestore, 'appSubmodules', currentSub.id);
-        updateDocumentNonBlocking(currentDocRef, { position: targetSub.position });
-        
         const targetDocRef = doc(firestore, 'appSubmodules', targetSub.id);
-        updateDocumentNonBlocking(targetDocRef, { position: currentSub.position });
 
-        toast({
-            title: "Submodule Moved",
-            description: `Moved '${currentSub.name}'.`,
+        batch.update(currentDocRef, { position: targetSub.position });
+        batch.update(targetDocRef, { position: currentSub.position });
+
+        batch.commit().then(() => {
+            toast({ title: "Submodule Moved", description: `Moved '${currentSub.name}'.` });
         });
-    }
+    };
+
+    const handleMoveGroup = async (groupName: string, direction: 'up' | 'down') => {
+        if (!firestore || !submodules) return;
+
+        const currentGroupIndex = groupOrder.indexOf(groupName);
+        const targetGroupIndex = direction === 'up' ? currentGroupIndex - 1 : currentGroupIndex + 1;
+
+        if (targetGroupIndex < 0 || targetGroupIndex >= groupOrder.length) return;
+
+        const targetGroupName = groupOrder[targetGroupIndex];
+        const currentGroupItems = groupedSubmodules[groupName].sort((a, b) => a.position - b.position);
+        const targetGroupItems = groupedSubmodules[targetGroupName].sort((a, b) => a.position - b.position);
+
+        const allItemsToUpdate = [...currentGroupItems, ...targetGroupItems];
+        const originalPositions = allItemsToUpdate.map(item => item.position).sort((a, b) => a - b);
+        
+        const newArrangement = direction === 'down' 
+            ? [...targetGroupItems, ...currentGroupItems]
+            : [...currentGroupItems, ...targetGroupItems];
+
+        try {
+            const batch = writeBatch(firestore);
+            newArrangement.forEach((item, index) => {
+                const docRef = doc(firestore, 'appSubmodules', item.id!);
+                batch.update(docRef, { position: originalPositions[index] });
+            });
+            await batch.commit();
+            toast({ title: "Group Reordered", description: `The '${groupName}' group has been moved.` });
+        } catch (error) {
+            console.error("Error reordering group:", error);
+            toast({ variant: 'destructive', title: "Reorder Failed", description: "Could not reorder the group." });
+        }
+    };
 
     const handleDesignForm = () => {
         if (!selectedSubmodule) {
@@ -199,68 +239,89 @@ export default function FormSettingPage() {
         Use this section to customize your ERP by adding new submodules, creating entry forms, and adding new fields.
       </p>
 
-      <div className="grid gap-8 md:grid-cols-2">
-        {/* Create New Submodule */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New Submodule</CardTitle>
-            <CardDescription>Add a new submodule to an existing main module and group.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="main-module">Main Module</Label>
-              <Select onValueChange={setMainModule} value={mainModule}>
-                <SelectTrigger id="main-module">
-                  <SelectValue placeholder="Select a main module" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Transactions">Transactions</SelectItem>
-                  <SelectItem value="Sales">Sales</SelectItem>
-                  <SelectItem value="Inventory">Inventory</SelectItem>
-                  <SelectItem value="Purchase">Purchase</SelectItem>
-                  <SelectItem value="CRM">CRM</SelectItem>
-                  <SelectItem value="Reports">Reports</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="group-name">Group Name</Label>
-                <Combobox
-                    options={uniqueGroups}
-                    value={groupName}
-                    onChange={setGroupName}
-                    placeholder="Select or create a group..."
-                    emptyText="No groups found. Type to create one."
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Left Column */}
+        <div className="lg:col-span-1 flex flex-col gap-8">
+            <Card>
+            <CardHeader>
+                <CardTitle>Create New Submodule</CardTitle>
+                <CardDescription>Add a new submodule to an existing main module and group.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-2">
+                <Label htmlFor="main-module">Main Module</Label>
+                <Select onValueChange={setMainModule} value={mainModule}>
+                    <SelectTrigger id="main-module">
+                    <SelectValue placeholder="Select a main module" />
+                    </SelectTrigger>
+                    <SelectContent>
+                    <SelectItem value="Transactions">Transactions</SelectItem>
+                    <SelectItem value="Sales">Sales</SelectItem>
+                    <SelectItem value="Inventory">Inventory</SelectItem>
+                    <SelectItem value="Purchase">Purchase</SelectItem>
+                    <SelectItem value="CRM">CRM</SelectItem>
+                    <SelectItem value="Reports">Reports</SelectItem>
+                    </SelectContent>
+                </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="group-name">Group Name</Label>
+                    <Combobox
+                        options={uniqueGroups}
+                        value={groupName}
+                        onChange={setGroupName}
+                        placeholder="Select or create a group..."
+                        emptyText="No groups found. Type to create one."
+                    />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="submodule-name">Submodule Name</Label>
+                <Input 
+                    id="submodule-name" 
+                    placeholder="e.g., 'Invoices', 'Production Order'"
+                    value={submoduleName}
+                    onChange={(e) => setSubmoduleName(e.target.value)}
                 />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="submodule-name">Submodule Name</Label>
-              <Input 
-                id="submodule-name" 
-                placeholder="e.g., 'Invoices', 'Production Order'"
-                value={submoduleName}
-                onChange={(e) => setSubmoduleName(e.target.value)}
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleCreateSubmodule}>Create Submodule</Button>
-          </CardFooter>
-        </Card>
+                </div>
+            </CardContent>
+            <CardFooter>
+                <Button onClick={handleCreateSubmodule}>Create Submodule</Button>
+            </CardFooter>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Design Entry Form</CardTitle>
+                    <CardDescription>Create or modify the entry form for a submodule.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                    <Label htmlFor="design-submodule">Submodule</Label>
+                    <Select onValueChange={setSelectedSubmodule} value={selectedSubmodule}>
+                    <SelectTrigger id="design-submodule">
+                        <SelectValue placeholder="Select a submodule" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {submodules && submodules.map(sub => <SelectItem key={sub.id} value={sub.id as string}>{sub.name}</SelectItem>)}
+                    </SelectContent>
+                    </Select>
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={handleDesignForm}>Design Form</Button>
+                </CardFooter>
+            </Card>
+        </div>
 
-        {/* Manage Submodules */}
-        <Card>
+        {/* Right Column */}
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Manage Submodules</CardTitle>
-            <CardDescription>Edit or delete existing submodules.</CardDescription>
+            <CardDescription>Edit, reorder, or delete existing submodules and groups.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Submodule Name</TableHead>
+                  <TableHead className="w-[50%]">Submodule Name</TableHead>
                   <TableHead>Main Module</TableHead>
-                   <TableHead>Group</TableHead>
                   <TableHead>Order</TableHead>
                   <TableHead><span className="sr-only">Actions</span></TableHead>
                 </TableRow>
@@ -268,114 +329,67 @@ export default function FormSettingPage() {
               <TableBody>
                 {isLoading && (
                     <TableRow>
-                        <TableCell colSpan={5} className="text-center">Loading submodules...</TableCell>
+                        <TableCell colSpan={4} className="text-center">Loading submodules...</TableCell>
                     </TableRow>
                 )}
-                {submodules && submodules.map((sub, index) => (
-                  <TableRow key={sub.id}>
-                    <TableCell className="font-medium">{sub.name}</TableCell>
-                    <TableCell>{sub.mainModule}</TableCell>
-                    <TableCell>{sub.group}</TableCell>
-                    <TableCell className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleMove(index, 'up')} disabled={index === 0}>
-                            <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleMove(index, 'down')} disabled={index === submodules.length - 1}>
-                            <ArrowDown className="h-4 w-4" />
-                        </Button>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Toggle menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem>Edit</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => confirmDeleteSubmodule(sub)} className="text-red-500 focus:text-red-500 focus:bg-red-50">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                {!isLoading && groupOrder.map((group, groupIndex) => (
+                    <>
+                        <TableRow key={`group-${group}`} className="bg-muted/50 hover:bg-muted/50">
+                            <TableCell colSpan={2} className="font-bold">
+                                {group}
+                            </TableCell>
+                            <TableCell className="flex gap-1">
+                                <Button variant="ghost" size="icon" onClick={() => handleMoveGroup(group, 'up')} disabled={groupIndex === 0}>
+                                    <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleMoveGroup(group, 'down')} disabled={groupIndex === groupOrder.length - 1}>
+                                    <ArrowDown className="h-4 w-4" />
+                                </Button>
+                            </TableCell>
+                            <TableCell></TableCell>
+                        </TableRow>
+                        {groupedSubmodules[group].map((sub, subIndex) => (
+                            <TableRow key={sub.id}>
+                                <TableCell className="pl-8 font-medium">{sub.name}</TableCell>
+                                <TableCell>{sub.mainModule}</TableCell>
+                                <TableCell className="flex gap-1">
+                                    <Button variant="ghost" size="icon" onClick={() => handleMoveSubmodule(groupedSubmodules[group], subIndex, 'up')} disabled={subIndex === 0}>
+                                        <ArrowUp className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleMoveSubmodule(groupedSubmodules[group], subIndex, 'down')} disabled={subIndex === groupedSubmodules[group].length - 1}>
+                                        <ArrowDown className="h-4 w-4" />
+                                    </Button>
+                                </TableCell>
+                                <TableCell>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                    <Button aria-haspopup="true" size="icon" variant="ghost">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                        <span className="sr-only">Toggle menu</span>
+                                    </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                    <DropdownMenuItem>Edit</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => confirmDeleteSubmodule(sub)} className="text-red-500 focus:text-red-500 focus:bg-red-50">
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete
+                                    </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </>
                 ))}
                 {!isLoading && (!submodules || submodules.length === 0) && (
                      <TableRow>
-                        <TableCell colSpan={5} className="text-center">No submodules found.</TableCell>
+                        <TableCell colSpan={4} className="text-center">No submodules found.</TableCell>
                     </TableRow>
                 )}
               </TableBody>
             </Table>
           </CardContent>
-        </Card>
-
-        {/* Design Entry Form */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Design Entry Form</CardTitle>
-            <CardDescription>Create or modify the entry form for a submodule.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Label htmlFor="design-submodule">Submodule</Label>
-            <Select onValueChange={setSelectedSubmodule} value={selectedSubmodule}>
-              <SelectTrigger id="design-submodule">
-                <SelectValue placeholder="Select a submodule" />
-              </SelectTrigger>
-              <SelectContent>
-                {submodules && submodules.map(sub => <SelectItem key={sub.id} value={sub.id as string}>{sub.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleDesignForm}>Design Form</Button>
-          </CardFooter>
-        </Card>
-
-        {/* Add Custom Fields */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Add Custom Fields</CardTitle>
-            <CardDescription>Add new fields to an existing entry form.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="space-y-2">
-                <Label htmlFor="field-submodule">Submodule</Label>
-                <Select>
-                  <SelectTrigger id="field-submodule">
-                    <SelectValue placeholder="Select a submodule" />
-                  </SelectTrigger>
-                  <SelectContent>
-                     {submodules && submodules.map(sub => <SelectItem key={sub.id} value={sub.id as string}>{sub.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="field-name">Field Name</Label>
-                <Input id="field-name" placeholder="e.g., 'Due Date'" />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="field-type">Field Type</Label>
-                <Select>
-                  <SelectTrigger id="field-type">
-                    <SelectValue placeholder="Select a field type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="text">Text</SelectItem>
-                    <SelectItem value="number">Number</SelectItem>
-                    <SelectItem value="date">Date</SelectItem>
-                    <SelectItem value="boolean">Checkbox</SelectItem>
-                  </SelectContent>
-                </Select>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button>Add Field</Button>
-          </CardFooter>
         </Card>
       </div>
     </div>
@@ -403,5 +417,3 @@ export default function FormSettingPage() {
     </>
   );
 }
-
-    
