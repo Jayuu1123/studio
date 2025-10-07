@@ -45,44 +45,44 @@ import type { TransactionEntry, FormField, AppSubmodule, PermissionSet } from '@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 
 
-function DynamicFormField({ field, value, onChange, disabled }: { field: FormField, value: any, onChange: (fieldId: string, value: any) => void, disabled: boolean }) {
-    const fieldId = field.name.toLowerCase().replace(/\s/g, '-');
+function DynamicFormField({ field, value, onChange, disabled }: { field: FormField, value: any, onChange: (fieldKey: string, value: any) => void, disabled: boolean }) {
+    const fieldId = field.key.toLowerCase().replace(/\s/g, '-');
     switch (field.type) {
         case 'text':
             return (
                 <div className="grid gap-3">
-                    <Label htmlFor={fieldId}>{field.name}</Label>
-                    <Input id={fieldId} value={value || ''} onChange={(e) => onChange(field.id!, e.target.value)} disabled={disabled} />
+                    <Label htmlFor={fieldId}>{field.label}</Label>
+                    <Input id={fieldId} value={value || ''} onChange={(e) => onChange(field.key, e.target.value)} disabled={disabled} placeholder={field.placeholder}/>
                 </div>
             );
         case 'number':
             return (
                 <div className="grid gap-3">
-                    <Label htmlFor={fieldId}>{field.name}</Label>
-                    <Input id={fieldId} type="number" value={value || ''} onChange={(e) => onChange(field.id!, e.target.valueAsNumber)} disabled={disabled} />
+                    <Label htmlFor={fieldId}>{field.label}</Label>
+                    <Input id={fieldId} type="number" value={value || ''} onChange={(e) => onChange(field.key, e.target.valueAsNumber)} disabled={disabled} placeholder={field.placeholder} />
                 </div>
             );
         case 'date':
              return (
                 <div className="grid gap-3">
-                    <Label htmlFor={fieldId}>{field.name}</Label>
-                    <DatePicker date={value ? new Date(value) : undefined} setDate={(d) => onChange(field.id!, d)} disabled={disabled} />
+                    <Label htmlFor={fieldId}>{field.label}</Label>
+                    <DatePicker date={value ? new Date(value) : undefined} setDate={(d) => onChange(field.key, d)} disabled={disabled} />
                 </div>
             );
         case 'boolean':
              return (
                 <div className="flex items-center gap-2 pt-4">
-                    <Checkbox id={fieldId} checked={value || false} onCheckedChange={(c) => onChange(field.id!, c)} disabled={disabled} />
-                    <Label htmlFor={fieldId}>{field.name}</Label>
+                    <Checkbox id={fieldId} checked={value || false} onCheckedChange={(c) => onChange(field.key, c)} disabled={disabled} />
+                    <Label htmlFor={fieldId}>{field.label}</Label>
                 </div>
             );
         case 'select':
             return (
                 <div className="grid gap-3">
-                    <Label htmlFor={fieldId}>{field.name}</Label>
-                    <Select value={value} onValueChange={(v) => onChange(field.id!, v)} disabled={disabled}>
+                    <Label htmlFor={fieldId}>{field.label}</Label>
+                    <Select value={value} onValueChange={(v) => onChange(field.key, v)} disabled={disabled}>
                         <SelectTrigger id={fieldId}>
-                            <SelectValue placeholder={`Select ${field.name}`} />
+                            <SelectValue placeholder={field.placeholder || `Select ${field.label}`} />
                         </SelectTrigger>
                         <SelectContent>
                            {/* In a real app, options would come from the field definition */}
@@ -140,7 +140,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
 
   const formFieldsQuery = useMemoFirebase(() => {
     if(!firestore || !submoduleId) return null;
-    return query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'), orderBy('name'));
+    return query(collection(firestore, 'appSubmodules', submoduleId, 'formFields'), orderBy('position'));
   }, [firestore, submoduleId]);
 
   const { data: allFormFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
@@ -343,21 +343,21 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
     }
   };
 
-  const handleHeaderFieldChange = (fieldId: string, value: any) => {
+  const handleHeaderFieldChange = (fieldKey: string, value: any) => {
     handleFieldChange(prev => ({ 
         ...prev, 
         customFields: {
             ...prev.customFields,
-            [fieldId]: value
+            [fieldKey]: value
         }
     }));
   };
 
-  const handleDetailFieldChange = (rowIndex: number, fieldId: string, value: any) => {
+  const handleDetailFieldChange = (rowIndex: number, fieldKey: string, value: any) => {
     handleFieldChange(prev => {
       const newLineItems = [...(prev.lineItems || [])];
       if (!newLineItems[rowIndex]) newLineItems[rowIndex] = {};
-      newLineItems[rowIndex][fieldId] = value;
+      newLineItems[rowIndex][fieldKey] = value;
       return { ...prev, lineItems: newLineItems };
     });
   };
@@ -431,7 +431,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
                     <DynamicFormField 
                         key={field.id} 
                         field={field} 
-                        value={formData.customFields?.[field.id!] ?? ''}
+                        value={formData.customFields?.[field.key] ?? ''}
                         onChange={handleHeaderFieldChange}
                         disabled={!effectiveIsEditing}
                     />
@@ -460,7 +460,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
                         <TableHeader>
                             <TableRow>
                                 {detailFields.map(field => (
-                                    <TableHead key={field.id}>{field.name}</TableHead>
+                                    <TableHead key={field.id}>{field.label}</TableHead>
                                 ))}
                                 {effectiveIsEditing && (
                                 <TableHead className="w-[50px]">
@@ -476,10 +476,11 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
                                         <TableCell key={field.id}>
                                             <Input
                                                 type={field.type === 'number' ? 'number' : 'text'}
-                                                value={item[field.id!] || ''}
-                                                onChange={(e) => handleDetailFieldChange(rowIndex, field.id!, field.type === 'number' ? e.target.valueAsNumber : e.target.value)}
+                                                value={item[field.key] || ''}
+                                                onChange={(e) => handleDetailFieldChange(rowIndex, field.key, field.type === 'number' ? e.target.valueAsNumber : e.target.value)}
                                                 className="w-full"
                                                 disabled={!effectiveIsEditing}
+                                                placeholder={field.placeholder}
                                             />
                                         </TableCell>
                                     ))}
