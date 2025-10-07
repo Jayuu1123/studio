@@ -92,7 +92,6 @@ export default function LoginPage() {
         router.push('/dashboard');
 
     } catch (error: any) {
-        console.error("Login failed:", error);
         let description = "An unexpected error occurred. Please try again.";
         switch (error.code) {
             case 'auth/invalid-email':

@@ -96,11 +96,11 @@ export function AppLayoutClient({
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
   const submodulesQuery = useMemoFirebase(() => {
-    if (!firestore || isUserLoading) {
+    if (!firestore || !user) {
       return null;
     }
     return query(collection(firestore, 'appSubmodules'), orderBy('position'));
-  }, [firestore, isUserLoading]);
+  }, [firestore, user]);
 
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
@@ -130,14 +130,14 @@ export function AppLayoutClient({
 
 
   const activeLicenseQuery = useMemoFirebase(() => {
-    if (isUserLoading || !user) {
+    if (!user) {
       return null;
     }
     return query(
         collection(firestore, 'licenses'), 
         where('status', '==', 'active')
     );
-  }, [firestore, isUserLoading, user]);
+  }, [firestore, user]);
 
   const { data: activeLicenses, isLoading: isLoadingLicenses } = useCollection<License>(activeLicenseQuery);
 

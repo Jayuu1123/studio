@@ -67,18 +67,14 @@ export function useCollection<T = any>(
             : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
     ) : null;
     
-  console.log(`useCollection: Hook called for path: ${path || 'null'}`);
-
   useEffect(() => {
     if (!memoizedTargetRefOrQuery) {
-      console.log(`useCollection (${path}): No query provided, clearing state.`);
       setData(null);
       setIsLoading(false);
       setError(null);
       return;
     }
     
-    console.log(`useCollection (${path}): Setting up snapshot listener.`);
     setIsLoading(true);
     setError(null);
 
@@ -86,7 +82,6 @@ export function useCollection<T = any>(
     const unsubscribe = onSnapshot(
       memoizedTargetRefOrQuery,
       (snapshot: QuerySnapshot<DocumentData>) => {
-        console.log(`useCollection (${path}): Snapshot received with ${snapshot.docs.length} documents.`);
         const results: ResultItemType[] = [];
         for (const doc of snapshot.docs) {
           results.push({ ...(doc.data() as T), id: doc.id });
@@ -96,7 +91,6 @@ export function useCollection<T = any>(
         setIsLoading(false);
       },
       (error: FirestoreError) => {
-        console.error(`useCollection (${path}): Snapshot error!`, error);
         // This logic extracts the path from either a ref or a query
         const errorPath: string =
           memoizedTargetRefOrQuery.type === 'collection'
@@ -118,7 +112,6 @@ export function useCollection<T = any>(
     );
 
     return () => {
-        console.log(`useCollection (${path}): Unsubscribing from snapshot listener.`);
         unsubscribe();
     }
   }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
