@@ -4,10 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, FileText, PlusCircle, Trash2, Save } from "lucide-react";
-import { useState, useMemo } from "react";
-import { useFirestore, useDoc, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, doc, query, where, writeBatch, orderBy } from "firebase/firestore";
+import { ChevronLeft, FileText, PlusCircle, Trash2, Save, AlertCircle } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { collection, doc, query, where, orderBy, getDocs } from "firebase/firestore";
 import { addDocumentNonBlocking, deleteDocumentNonBlocking, setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import type { AppSubmodule, FormField } from "@/lib/types";
 import { useParams } from "next/navigation";
@@ -16,6 +16,8 @@ import { FormSettingSidebar } from "@/components/settings/form-setting-sidebar";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { slugify } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 
 export default function DetailsFormPage() {
     const params = useParams();
@@ -24,6 +26,8 @@ export default function DetailsFormPage() {
     const submoduleId = params.submoduleId as string;
 
     const [fields, setFields] = useState<FormField[]>([]);
+    const [isLoadingFields, setIsLoadingFields] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const submoduleRef = useMemoFirebase(() => {
         if (!firestore || !submoduleId) return null;
@@ -32,22 +36,35 @@ export default function DetailsFormPage() {
 
     const { data: submodule, isLoading: isLoadingSubmodule } = useDoc<AppSubmodule>(submoduleRef);
 
-    const formFieldsQuery = useMemoFirebase(() => {
-        if (!firestore || !submoduleId) return null;
-        return query(
-            collection(firestore, 'appSubmodules', submoduleId, 'formFields'),
-            where('section', '==', 'detail'),
-            orderBy('position')
-        );
-    }, [firestore, submoduleId]);
+    useEffect(() => {
+        const fetchFields = async () => {
+            if (!firestore || !submoduleId) {
+                setIsLoadingFields(false);
+                return;
+            };
 
-    const { data: detailFields, isLoading: isLoadingFields } = useCollection<FormField>(formFieldsQuery);
-    
-    useMemo(() => {
-        if (detailFields) {
-            setFields(detailFields);
-        }
-    }, [detailFields]);
+            setIsLoadingFields(true);
+            setError(null);
+
+            try {
+                const formFieldsQuery = query(
+                    collection(firestore, 'appSubmodules', submoduleId, 'formFields'),
+                    where('section', '==', 'detail'),
+                    orderBy('position')
+                );
+                const querySnapshot = await getDocs(formFieldsQuery);
+                const fetchedFields = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FormField));
+                setFields(fetchedFields);
+            } catch (e: any) {
+                console.error("Failed to fetch detail fields:", e);
+                setError("Could not load detail fields. Please check permissions and try again.");
+            } finally {
+                setIsLoadingFields(false);
+            }
+        };
+
+        fetchFields();
+    }, [firestore, submoduleId]);
 
     const handleFieldChange = (index: number, prop: keyof FormField, value: any) => {
         const newFields = [...fields];
@@ -168,6 +185,13 @@ export default function DetailsFormPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
+                         {error && (
+                             <Alert variant="destructive" className="mb-4">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertTitle>Error</AlertTitle>
+                                <AlertDescription>{error}</AlertDescription>
+                            </Alert>
+                        )}
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -181,8 +205,8 @@ export default function DetailsFormPage() {
                             </TableHeader>
                             <TableBody>
                                 {isLoadingFields && <TableRow><TableCell colSpan={6} className="text-center">Loading columns...</TableCell></TableRow>}
-                                {fields.map((field, index) => (
-                                    <TableRow key={index}>
+                                {!isLoadingFields && !error && fields.map((field, index) => (
+                                    <TableRow key={field.id || index}>
                                         <TableCell>
                                             <Input value={field.key} onChange={e => handleFieldChange(index, 'key', e.target.value)} placeholder="e.g., item_name" />
                                         </TableCell>
@@ -217,7 +241,9 @@ export default function DetailsFormPage() {
                                         </TableCell>
                                     </TableRow>
                                 ))}
-                                {!isLoadingFields && !fields.length && <TableRow><TableCell colSpan={6} className="text-center py-8">No grid columns defined. Click "Add Column" to begin.</TableCell></TableRow>}
+                                {!isLoadingFields && !error && !fields.length && <TableRow><TableCell colSpan={6} className="text-center py-8">No grid columns defined. Click "Add Column" to begin.</TableCell></TableRow>}
+
+                                {!isLoadingFields && error && <TableRow><TableCell colSpan={6} className="text-center py-8 text-destructive">{error}</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </CardContent>
@@ -227,5 +253,3 @@ export default function DetailsFormPage() {
         </div>
     );
 }
-
-    
