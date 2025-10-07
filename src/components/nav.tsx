@@ -25,6 +25,7 @@ import {
 import { cn, slugify } from '@/lib/utils';
 import type { PermissionSet, AppSubmodule } from '@/lib/types';
 import { useUser } from '@/firebase';
+import { useMemo } from 'react';
 
 
 const navItems = [
@@ -41,11 +42,12 @@ const navItems = [
   { href: '/form-setting', icon: FileText, label: 'Form Setting' },
 ];
 
-export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet, submodules: AppSubmodule[] }) {
+export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet | null, submodules: AppSubmodule[] }) {
   const pathname = usePathname();
   const { user } = useUser();
   
   const hasAccess = (label: string) => {
+    if (!permissions) return false;
     // Hardcoded override for the super admin. This is a failsafe.
     if (user?.email === 'sa@admin.com') return true;
 
@@ -60,6 +62,10 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
     // Grant access if the permission is explicitly true or if it's an object (implying granular sub-permissions).
     return permission === true || (typeof permission === 'object' && permission !== null);
   }
+
+  const memoizedNavItems = useMemo(() => {
+    return navItems.filter(item => hasAccess(item.label));
+  }, [permissions, submodules]);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r bg-background sm:flex">
@@ -83,9 +89,7 @@ export function Nav({ isLicensed, permissions, submodules }: { isLicensed: boole
           <span className="sr-only">SynergyFlow ERP</span>
         </Link>
         <TooltipProvider>
-          {navItems.map((item) => {
-            if (!hasAccess(item.label)) return null;
-
+          {memoizedNavItems.map((item) => {
             const isDisabled = isLicensed === false;
             return (
                 <Tooltip key={item.href}>

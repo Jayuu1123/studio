@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -104,11 +104,12 @@ function BreadcrumbNav() {
 }
 
 
-export function Header({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet, submodules: AppSubmodule[] }) {
+export function Header({ isLicensed, permissions, submodules }: { isLicensed: boolean | null, permissions: PermissionSet | null, submodules: AppSubmodule[] }) {
   const pathname = usePathname();
   const { user } = useUser();
   
   const hasAccess = (label: string) => {
+    if (!permissions) return false;
     if (user?.email === 'sa@admin.com') return true;
     if (permissions.all) return true;
 
@@ -116,9 +117,12 @@ export function Header({ isLicensed, permissions, submodules }: { isLicensed: bo
     if (!hasSubmodulesForModule && !['Dashboard', 'Form Setting', 'Settings'].includes(label)) return false;
 
     const permission = permissions[slugify(label)];
-    // Grant access if the permission is explicitly true or if it's an object (implying granular sub-permissions).
     return permission === true || (typeof permission === 'object' && permission !== null);
   }
+
+  const memoizedMobileNavItems = useMemo(() => {
+    return mobileNavItems.filter(item => hasAccess(item.label));
+  }, [permissions, submodules]);
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
@@ -149,9 +153,7 @@ export function Header({ isLicensed, permissions, submodules }: { isLicensed: bo
               </svg>
               <span className="sr-only">SynergyFlow ERP</span>
             </Link>
-            {mobileNavItems.map((item) => {
-                if (!hasAccess(item.label)) return null;
-
+            {memoizedMobileNavItems.map((item) => {
                 const isDisabled = isLicensed === false && !item.href.startsWith('/settings');
                  return (
                     <Link
