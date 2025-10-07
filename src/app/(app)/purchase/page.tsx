@@ -1,24 +1,21 @@
 'use client';
+import { useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
-import Link from "next/link";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, query, where } from "firebase/firestore";
 import type { AppSubmodule } from "@/lib/types";
 import { SubmoduleCard } from "@/components/submodule-card";
 import { Loader2 } from "lucide-react";
 
-export default function PurchasePage() {
-  const firestore = useFirestore();
+interface PurchasePageProps {
+    submodules: AppSubmodule[];
+}
 
-  const submodulesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'appSubmodules'), where('mainModule', '==', 'Purchase'));
-  }, [firestore]);
+export default function PurchasePage({ submodules = [] }: PurchasePageProps) {
+  const purchaseSubmodules = useMemo(() => {
+    return submodules.filter(sub => sub.mainModule === 'Purchase');
+  }, [submodules]);
 
-  const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
-
+  // The parent (`AppLayoutClient`) will show a loader.
+  const isLoading = false;
 
   return (
     <div className="space-y-6">
@@ -32,15 +29,15 @@ export default function PurchasePage() {
             </div>
         )}
 
-        {!isLoading && submodules && submodules.length > 0 && (
+        {!isLoading && purchaseSubmodules && purchaseSubmodules.length > 0 && (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {submodules.map(submodule => (
+                {purchaseSubmodules.map(submodule => (
                     <SubmoduleCard key={submodule.id} submodule={submodule} />
                 ))}
             </div>
         )}
 
-        {!isLoading && (!submodules || submodules.length === 0) && (
+        {!isLoading && (!purchaseSubmodules || purchaseSubmodules.length === 0) && (
             <Card>
                 <CardHeader>
                 <CardTitle>No Purchase Submodules Found</CardTitle>

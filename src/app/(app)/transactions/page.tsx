@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
 import type { AppSubmodule } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,23 +8,22 @@ import Link from 'next/link';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-export default function TransactionsPage() {
-  const firestore = useFirestore();
+interface TransactionsPageProps {
+  submodules: AppSubmodule[];
+}
 
-  const submodulesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-      collection(firestore, 'appSubmodules'),
-      where('mainModule', '==', 'Transactions'),
-      orderBy('position')
-    );
-  }, [firestore]);
+export default function TransactionsPage({ submodules = [] }: TransactionsPageProps) {
 
-  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
+  const transactionSubmodules = useMemo(() => {
+    return submodules.filter(sub => sub.mainModule === 'Transactions');
+  }, [submodules]);
+  
+  // The parent (`AppLayoutClient`) will show a loader.
+  const isLoadingSubmodules = false;
 
   const groupedSubmodules = useMemo(() => {
-    if (!submodules) return {};
-    return submodules.reduce((acc, submodule) => {
+    if (!transactionSubmodules) return {};
+    return transactionSubmodules.reduce((acc, submodule) => {
       const group = submodule.group || 'Uncategorized';
       if (!acc[group]) {
         acc[group] = [];
@@ -34,14 +31,14 @@ export default function TransactionsPage() {
       acc[group].push(submodule);
       return acc;
     }, {} as Record<string, AppSubmodule[]>);
-  }, [submodules]);
+  }, [transactionSubmodules]);
 
   const groupOrder = useMemo(() => {
-    if (!submodules) return [];
-    // Get unique group names in the order they first appear
-    const order = submodules.map(s => s.group || 'Uncategorized');
+    if (!transactionSubmodules) return [];
+    // Get unique group names in the order they first appear based on original `position` sort
+    const order = transactionSubmodules.map(s => s.group || 'Uncategorized');
     return [...new Set(order)];
-  }, [submodules]);
+  }, [transactionSubmodules]);
 
 
   return (
@@ -65,7 +62,7 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {!isLoadingSubmodules && submodules && submodules.length > 0 ? (
+      {!isLoadingSubmodules && transactionSubmodules && transactionSubmodules.length > 0 ? (
         <div className="space-y-8">
           {groupOrder.map(groupName => (
             <div key={groupName}>
@@ -80,7 +77,7 @@ export default function TransactionsPage() {
         </div>
       ) : null}
 
-      {!isLoadingSubmodules && (!submodules || submodules.length === 0) && (
+      {!isLoadingSubmodules && (!transactionSubmodules || transactionSubmodules.length === 0) && (
         <Card>
           <CardHeader>
             <CardTitle>No Transaction Submodules Found</CardTitle>
