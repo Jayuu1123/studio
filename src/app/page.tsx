@@ -69,43 +69,50 @@ export default function LoginPage() {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Generate a new session ID
         const newSessionId = uuidv4();
-        
         const userDocRef = doc(firestore, 'users', user.uid);
-        
-        // Check if the user document already exists
         const userDocSnap = await getDoc(userDocRef);
 
         if (!userDocSnap.exists()) {
-          // Document doesn't exist, create it with initial data
           await setDoc(userDocRef, {
               id: user.uid,
-              username: user.email?.split('@')[0], // Set a default username
+              username: user.email?.split('@')[0] || 'user',
               email: user.email,
-              roles: email === 'sa@admin.com' ? ['super-admin'] : ['user'], // Assign a default role
+              roles: email === 'sa@admin.com' ? ['super-admin'] : ['user'],
               status: 'active',
               sessionId: newSessionId,
           });
         } else {
-          // Document exists, just update the session ID
            await setDoc(userDocRef, {
               sessionId: newSessionId,
           }, { merge: true });
         }
 
-
-        // Store the session ID in the client's session storage
         sessionStorage.setItem('userSessionId', newSessionId);
-        
         router.push('/dashboard');
 
     } catch (error: any) {
         console.error("Login failed:", error);
+        let description = "An unexpected error occurred. Please try again.";
+        switch (error.code) {
+            case 'auth/invalid-email':
+                description = "The email address is not valid. Please check the format.";
+                break;
+            case 'auth/user-not-found':
+            case 'auth/wrong-password':
+            case 'auth/invalid-credential':
+                description = "Invalid username or password. Please try again.";
+                break;
+            case 'auth/user-disabled':
+                description = "This account has been disabled by an administrator.";
+                break;
+            default:
+                description = error.message;
+        }
         toast({
             variant: "destructive",
             title: "Login Failed",
-            description: "Invalid username or password. Please try again."
+            description: description
         });
     } finally {
         setIsLoading(false);
