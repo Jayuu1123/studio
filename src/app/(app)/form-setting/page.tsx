@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useFirestore, useCollection, useMemoFirebase, useUser } from "@/firebase";
 import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { collection, serverTimestamp, doc, query, orderBy, getDocs, writeBatch, where } from "firebase/firestore";
@@ -25,6 +25,7 @@ import type { AppSubmodule } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { addDoc } from "firebase/firestore";
+import { Combobox } from "@/components/ui/combobox";
 
 
 export default function FormSettingPage() {
@@ -46,6 +47,12 @@ export default function FormSettingPage() {
     }, [firestore]);
 
     const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
+    
+    const uniqueGroups = useMemo(() => {
+        if (!submodules) return [];
+        const groups = submodules.map(sub => sub.group);
+        return [...new Set(groups)].map(group => ({ value: group.toLowerCase(), label: group }));
+    }, [submodules]);
 
     const handleCreateSubmodule = async () => {
         if (!mainModule || !submoduleName || !groupName) {
@@ -217,13 +224,14 @@ export default function FormSettingPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="group-name">Group Name</Label>
-              <Input 
-                id="group-name" 
-                placeholder="e.g., 'Production', 'Store Management'"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-              />
+                <Label htmlFor="group-name">Group Name</Label>
+                <Combobox
+                    options={uniqueGroups}
+                    value={groupName}
+                    onChange={setGroupName}
+                    placeholder="Select or create a group..."
+                    emptyText="No groups found. Type to create one."
+                />
             </div>
             <div className="space-y-2">
               <Label htmlFor="submodule-name">Submodule Name</Label>
