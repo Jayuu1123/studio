@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, updateDoc, collection, query, orderBy } from 'firebase/firestore';
 import type { Role, AppSubmodule, PermissionSet } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,7 @@ const ALL_MAIN_MODULES = [
 ];
 
 
-export default function ManagePermissionsPage() {
+export default function ManagePermissionsPage({ submodules = [] }: { submodules: AppSubmodule[] }) {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -51,12 +51,6 @@ export default function ManagePermissionsPage() {
     return doc(firestore, 'roles', roleId);
   }, [firestore, roleId]);
   const { data: role, isLoading: isLoadingRole } = useDoc<Role>(roleRef);
-
-  const submodulesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'appSubmodules'), orderBy('mainModule'), orderBy('position'));
-  }, [firestore]);
-  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
   useEffect(() => {
     if (role?.permissions) {
@@ -151,7 +145,7 @@ export default function ManagePermissionsPage() {
     }
   };
   
-  if (isLoadingRole || isLoadingSubmodules) {
+  if (isLoadingRole) {
     return <div className="flex items-center justify-center h-48"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
