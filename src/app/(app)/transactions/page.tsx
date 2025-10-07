@@ -46,7 +46,7 @@ export default function TransactionsPage({ submodules = [] }: TransactionsPagePr
        <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold font-headline">Transactions</h1>
-          <p className="text-muted-foreground">Home &gt; Transactions</p>
+          <p className="text-muted-foreground">Home > Transactions</p>
         </div>
         <Button asChild>
             <Link href="/form-setting">
@@ -68,9 +68,12 @@ export default function TransactionsPage({ submodules = [] }: TransactionsPagePr
             <div key={groupName}>
               <h2 className="text-2xl font-semibold mb-4 font-headline">{groupName}</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {groupedSubmodules[groupName].map((submodule) => (
-                  <SubmoduleCard key={submodule.id} submodule={submodule} />
-                ))}
+                {groupedSubmodules[groupName]
+                  // Secondary sort by position within the group on the client-side
+                  .sort((a, b) => a.position - b.position)
+                  .map((submodule) => (
+                    <SubmoduleCard key={submodule.id} submodule={submodule} />
+                  ))}
               </div>
             </div>
           ))}

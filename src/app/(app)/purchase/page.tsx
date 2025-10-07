@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import type { AppSubmodule } from "@/lib/types";
 import { SubmoduleCard } from "@/components/submodule-card";
 import { Loader2 } from "lucide-react";
+import Link from 'next/link';
 
 interface PurchasePageProps {
     submodules: AppSubmodule[];
@@ -38,15 +39,14 @@ export default function PurchasePage({ submodules = [] }: PurchasePageProps) {
         )}
 
         {!isLoading && (!purchaseSubmodules || purchaseSubmodules.length === 0) && (
-            <Card>
+             <Card>
                 <CardHeader>
-                <CardTitle>No Purchase Submodules Found</CardTitle>
-                <CardDescription>
-                    Manage your procurement and purchase orders.
-                </CardDescription>
+                    <CardTitle>No Purchase Submodules Found</CardTitle>
                 </CardHeader>
                 <CardContent>
-                <p>You can create a new submodule for the purchase module from the Form Setting page.</p>
+                    <p className="text-muted-foreground">
+                        You can create new Purchase submodules in the <Link href="/form-setting" className="text-primary underline">Form Setting</Link> page.
+                    </p>
                 </CardContent>
             </Card>
         )}

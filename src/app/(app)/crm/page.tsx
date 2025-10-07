@@ -16,7 +16,6 @@ export default function CrmPage({ submodules = [] }: CrmPageProps) {
     }, [submodules]);
 
     // The parent (`AppLayoutClient`) will show a loader, so we don't need a separate one here.
-    // However, we can keep a check for safety.
     const isLoading = false; // Data is passed down directly.
 
     return (

@@ -96,6 +96,7 @@ export function AppLayoutClient({
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
   
   const submodulesQuery = useMemoFirebase(() => {
+    // IMPORTANT: Only run this query after we have a user.
     if (!firestore || isUserLoading) {
       return null;
     }
@@ -199,10 +200,16 @@ export function AppLayoutClient({
     }, [user, userData, isUserLoading, auth, toast, router]);
 
   
+  // This is the gatekeeper. It prevents any children from rendering until all critical data is loaded.
   const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
   const isSettingsPath = pathname.startsWith('/settings');
   const shouldShowWall = isLicensed === false && !isSettingsPath && pathname !== '/';
   
+  // Early return for disabled account, even before the main loader.
+  if (userData && userData.status === 'disabled') {
+    return <DisabledAccountWall />;
+  }
+
   if (isAppLoading) {
     return (
       <div className="flex items-center justify-center h-screen w-full">
@@ -211,6 +218,7 @@ export function AppLayoutClient({
     );
   }
   
+  // Only clone children after all loading is complete.
   const childrenWithProps = React.Children.map(children, child => {
     if (React.isValidElement(child)) {
       // @ts-ignore
@@ -219,15 +227,6 @@ export function AppLayoutClient({
     return child;
   });
 
-  if (userData && userData.status === 'disabled') {
-    return <DisabledAccountWall />;
-  }
-
-  if (!user && !isUserLoading) {
-    // This case is handled by the useEffect redirect, but as a fallback render nothing.
-    return null;
-  }
-  
   return (
         <>
             <Nav isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
