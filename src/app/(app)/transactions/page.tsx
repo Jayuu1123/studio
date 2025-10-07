@@ -18,7 +18,7 @@ export default function TransactionsPage() {
     return query(
       collection(firestore, 'appSubmodules'),
       where('mainModule', '==', 'Transactions'),
-      orderBy('position') // Simplified to a single orderBy
+      orderBy('position')
     );
   }, [firestore]);
 

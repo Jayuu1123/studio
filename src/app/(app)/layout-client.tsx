@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { doc, setDoc, getDoc, collection, query, where, Timestamp, serverTimestamp, updateDoc, orderBy } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import type { License, User, Role, PermissionSet, AppSubmodule } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -111,7 +110,7 @@ export function AppLayoutClient({
       return null;
     }
     console.log('AppLayoutClient: Creating submodulesQuery.');
-    return query(collection(firestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
+    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
   }, [firestore, isUserLoading, user]);
 
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
