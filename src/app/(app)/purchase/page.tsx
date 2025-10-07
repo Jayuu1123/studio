@@ -5,18 +5,24 @@ import type { AppSubmodule } from "@/lib/types";
 import { SubmoduleCard } from "@/components/submodule-card";
 import { Loader2 } from "lucide-react";
 import Link from 'next/link';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
 
-interface PurchasePageProps {
-    submodules: AppSubmodule[];
-}
+export default function PurchasePage() {
+  const firestore = useFirestore();
+  const { user } = useUser();
 
-export default function PurchasePage({ submodules = [] }: PurchasePageProps) {
+  const submodulesQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+  }, [firestore, user]);
+
+  const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
+
   const purchaseSubmodules = useMemo(() => {
+    if (!submodules) return [];
     return submodules.filter(sub => sub.mainModule === 'Purchase');
   }, [submodules]);
-
-  // The parent (`AppLayoutClient`) will show a loader.
-  const isLoading = false;
 
   return (
     <div className="space-y-6">

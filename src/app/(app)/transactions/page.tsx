@@ -7,19 +7,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { Loader2, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
 
-interface TransactionsPageProps {
-  submodules: AppSubmodule[];
-}
 
-export default function TransactionsPage({ submodules = [] }: TransactionsPageProps) {
+export default function TransactionsPage() {
+  const firestore = useFirestore();
+  const { user } = useUser();
+
+  const submodulesQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+  }, [firestore, user]);
+
+  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
   const transactionSubmodules = useMemo(() => {
+    if (!submodules) return [];
     return submodules.filter(sub => sub.mainModule === 'Transactions');
   }, [submodules]);
-  
-  // The parent (`AppLayoutClient`) will show a loader.
-  const isLoadingSubmodules = false;
 
   const groupedSubmodules = useMemo(() => {
     if (!transactionSubmodules) return {};

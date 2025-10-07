@@ -5,18 +5,26 @@ import { SubmoduleCard } from "@/components/submodule-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
 
-interface CrmPageProps {
-    submodules: AppSubmodule[];
-}
 
-export default function CrmPage({ submodules = [] }: CrmPageProps) {
+export default function CrmPage() {
+    const firestore = useFirestore();
+    const { user } = useUser();
+
+    const submodulesQuery = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+    }, [firestore, user]);
+
+    const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
+
     const crmSubmodules = useMemo(() => {
+        if (!submodules) return [];
         return submodules.filter(sub => sub.mainModule === 'CRM');
     }, [submodules]);
 
-    // The parent (`AppLayoutClient`) will show a loader, so we don't need a separate one here.
-    const isLoading = false; // Data is passed down directly.
 
     return (
         <div className="space-y-6">
