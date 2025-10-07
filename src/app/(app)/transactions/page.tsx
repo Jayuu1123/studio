@@ -5,8 +5,7 @@ import type { AppSubmodule } from '@/lib/types';
 import { SubmoduleCard } from '@/components/submodule-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { Loader2, PlusCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, orderBy } from 'firebase/firestore';
 
@@ -54,12 +53,6 @@ export default function TransactionsPage() {
           <h1 className="text-3xl font-bold font-headline">Transactions</h1>
           <p className="text-muted-foreground">Home > Transactions</p>
         </div>
-        <Button asChild>
-            <Link href="/form-setting">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Create Submodule
-            </Link>
-        </Button>
       </div>
 
       {isLoadingSubmodules && (
