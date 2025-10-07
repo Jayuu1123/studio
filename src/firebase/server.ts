@@ -3,25 +3,15 @@
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { firebaseConfig } from './config'; // We can reuse the project ID
 
-// This is a placeholder for service account credentials.
-// In a real deployed environment (like Cloud Run or Cloud Functions),
-// this would be automatically populated by Google Cloud.
-// For local development, you would need to point to a service account JSON file.
-const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
-  ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-  : undefined;
-
+// When running in a Google Cloud environment like App Hosting,
+// the Admin SDK can automatically discover the service account credentials.
+// We initialize the app without any arguments.
 const adminApp =
   getApps().find((app) => app.name === 'admin') ||
-  initializeApp(
-    {
-      credential: serviceAccount ? cert(serviceAccount) : undefined,
-      projectId: firebaseConfig.projectId,
-    },
-    'admin'
-  );
+  initializeApp({
+    // No explicit credential needed in App Hosting.
+  }, 'admin');
 
 
 export const adminAuth = getAuth(adminApp);
