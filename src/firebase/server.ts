@@ -7,16 +7,14 @@ import { getAuth } from 'firebase-admin/auth';
 
 let adminApp: App;
 
-// Check if the admin app is already initialized to prevent re-initialization.
-if (!getApps().length) {
-    // When running in a Google Cloud environment like App Hosting,
-    // the Admin SDK can automatically discover the service account credentials.
-    // We initialize the app without any arguments.
-    adminApp = initializeApp();
+// This is a robust way to initialize the admin app as a singleton.
+// It checks if there are any initialized apps. If not, it initializes one.
+// If there are, it gets the existing default app.
+if (getApps().length === 0) {
+  adminApp = initializeApp();
 } else {
-    adminApp = getApp();
+  adminApp = getApp();
 }
-
 
 export const adminAuth = getAuth(adminApp);
 export const adminFirestore = getFirestore(adminApp);
