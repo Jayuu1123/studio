@@ -62,6 +62,23 @@ function DisabledAccountWall() {
     );
 }
 
+// This function will be conceptually "run on the server" to fetch data
+// In a real Next.js app with server components, this would be a separate async function.
+// For this environment, we'll simulate it inside the main component.
+async function getSubmodules(firestore: any): Promise<AppSubmodule[]> {
+  if (!firestore) return [];
+  try {
+    const submodulesQuery = query(collection(firestore, 'appSubmodules'), orderBy('position'));
+    const snapshot = await getDocs(submodulesQuery);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AppSubmodule[];
+  } catch (error) {
+    console.error("Error fetching submodules on server-side:", error);
+    // In a real app, you might throw the error to be caught by an error boundary.
+    // For now, we return an empty array to prevent crashing the app.
+    return [];
+  }
+}
+
 
 export default function AppLayout({
   children,
@@ -76,6 +93,8 @@ export default function AppLayout({
   const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
   const [permissions, setPermissions] = useState<PermissionSet | null>(null);
+  const [submodules, setSubmodules] = useState<AppSubmodule[]>([]);
+  const [isLoadingSubmodules, setIsLoadingSubmodules] = useState(true);
   
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -92,13 +111,16 @@ export default function AppLayout({
   }, [firestore, userRoles]);
 
   const { data: roleDocs, isLoading: isLoadingRoles } = useCollection<Role>(rolesQuery);
-
-  const submodulesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'appSubmodules'), orderBy('position'));
+  
+   useEffect(() => {
+    // Simulate server-side fetch on mount
+    if (firestore) {
+      getSubmodules(firestore).then(data => {
+        setSubmodules(data);
+        setIsLoadingSubmodules(false);
+      });
+    }
   }, [firestore]);
-
-  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
 
 
   useEffect(() => {
