@@ -61,10 +61,10 @@ const statusConfig: {
 };
 
 
-export default function TransactionSubmodulePage() {
+export default function TransactionSubmodulePage({ submodules = [] }: { submodules: AppSubmodule[] }) {
   const params = useParams();
-  const submodule = params.submodule as string;
-  const submoduleName = unslugify(submodule);
+  const submoduleSlug = params.submodule as string;
+  const submoduleName = unslugify(submoduleSlug);
   const firestore = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
@@ -106,13 +106,8 @@ export default function TransactionSubmodulePage() {
 
   const { data: transactionEntries, isLoading } = useCollection<TransactionEntry>(entriesQuery);
 
-  const submoduleQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'appSubmodules'), where('name', '==', submoduleName));
-  }, [firestore, submoduleName]);
-  
-  const { data: submodules } = useCollection<AppSubmodule>(submoduleQuery);
-  const currentSubmodule = submodules?.[0];
+  const currentSubmodule = useMemo(() => submodules.find(s => s.name === submoduleName), [submodules, submoduleName]);
+
 
   const canDelete = useMemo(() => {
       if (!permissions || !currentSubmodule) return false;
@@ -144,11 +139,11 @@ export default function TransactionSubmodulePage() {
   };
 
   const handleDuplicateEntry = (entry: TransactionEntry) => {
-    router.push(`/transactions/${submodule}/new?duplicateId=${entry.id}`);
+    router.push(`/transactions/${submoduleSlug}/new?duplicateId=${entry.id}`);
   };
 
   const handleEditEntry = (entry: TransactionEntry) => {
-    router.push(`/transactions/${submodule}/new?editId=${entry.id}`);
+    router.push(`/transactions/${submoduleSlug}/new?editId=${entry.id}`);
   };
 
 
@@ -176,7 +171,7 @@ export default function TransactionSubmodulePage() {
             </DropdownMenu>
             {canWrite && (
               <Button asChild>
-                <Link href={`/transactions/${submodule}/new`}>
+                <Link href={`/transactions/${submoduleSlug}/new`}>
                   <PlusCircle className="h-4 w-4 mr-2" />Add New
                 </Link>
               </Button>
