@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth, useFirestore, useUser, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { doc, setDoc, getDoc, collection, query, where, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, Timestamp, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import type { License, User, Role, PermissionSet, AppSubmodule } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -129,18 +129,16 @@ export function AppLayoutClient({
   useEffect(() => {
     if (isLoadingLicenses) return;
 
-    if (activeLicenses) {
+    if (activeLicenses && activeLicenses.length > 0) {
         const now = Timestamp.now();
         const hasValidLicense = activeLicenses.some(license => 
             license.expiryDate && license.expiryDate.seconds > now.seconds
         );
         setIsLicensed(hasValidLicense);
-    } else if (!isUserLoading && user) {
-        setIsLicensed(false);
     } else {
-        setIsLicensed(null);
+        setIsLicensed(false);
     }
-  }, [activeLicenses, isLoadingLicenses, isUserLoading, user]);
+  }, [activeLicenses, isLoadingLicenses]);
 
    useEffect(() => {
         if (userData?.status === 'disabled') {
@@ -174,44 +172,30 @@ export function AppLayoutClient({
     const setupAdmin = async () => {
         if (!auth || !firestore) return;
 
-        const adminEmail = 'sa@admin.com';
-        const adminPassword = 'saadmin';
-        
         try {
-            // This part is problematic because it might run for non-admin users.
-            // A better approach would be a separate setup script or a callable cloud function.
-            // For now, we'll keep it but rely on the catch block to handle existing users.
-            const adminRoleRef = doc(firestore, 'roles', 'admin');
-            const adminRoleSnap = await getDoc(adminRoleRef);
-            if (!adminRoleSnap.exists()) {
-                await setDoc(adminRoleRef, {
-                    id: 'admin',
-                    name: 'Admin',
-                    description: 'Super administrator with all permissions.',
-                    permissions: { all: true }
-                });
-            }
-
-            const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPassword);
+            const userCredential = await createUserWithEmailAndPassword(auth, 'sa@admin.com', 'saadmin');
             const adminUID = userCredential.user.uid;
+            
+            const adminRoleRef = doc(firestore, 'roles', 'admin');
+            await setDoc(adminRoleRef, {
+                id: 'admin',
+                name: 'Admin',
+                description: 'Super administrator with all permissions.',
+                permissions: { all: true }
+            }, { merge: true });
 
             const userDocRef = doc(firestore, 'users', adminUID);
-            const userDoc = await getDoc(userDocRef);
+            await setDoc(userDocRef, {
+                username: 'sa',
+                email: 'sa@admin.com',
+                id: adminUID,
+                roles: ['Admin'],
+                status: 'active'
+            });
 
-            if (!userDoc.exists()) {
-                await setDoc(userDocRef, {
-                    username: 'sa',
-                    email: adminEmail,
-                    id: adminUID,
-                    roles: ['Admin'],
-                    status: 'active'
-                });
-                console.log("Admin user and roles document created in Firestore.");
-            }
         } catch (error: any) {
-            if (error.code === 'auth/email-already-in-use') {
-                // This is expected if the admin user already exists, so we can ignore it.
-            } else {
+            // We expect 'email-already-in-use', which is fine. Log other errors.
+            if (error.code !== 'auth/email-already-in-use') {
                 console.error("Failed to set up admin user:", error);
             }
         }
@@ -237,7 +221,7 @@ export function AppLayoutClient({
 
   if (isAppLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-100px)]">
+      <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -249,10 +233,16 @@ export function AppLayoutClient({
 
   return (
         <>
-            <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
-                    {childrenWithPermissions}
+            <Nav isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
+            <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
+                <Header isLicensed={isLicensed} permissions={permissions} submodules={submodules || []} />
+                <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 relative">
+                    <div className={shouldShowWall ? 'opacity-20 pointer-events-none' : ''}>
+                            {childrenWithPermissions}
+                    </div>
+                    {shouldShowWall && <LicenseWall />}
+                </main>
             </div>
-            {shouldShowWall && <LicenseWall />}
         </>
   );
 }
