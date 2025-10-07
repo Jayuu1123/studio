@@ -1,36 +1,29 @@
-'use server';
+'use client';
 import React from 'react';
-import { getDocs, collection, query, orderBy } from 'firebase/firestore';
-import { adminFirestore } from '@/firebase/server';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
 import type { AppSubmodule } from '@/lib/types';
 import { AppLayoutClient } from './layout-client';
 
-async function getSubmodules(): Promise<AppSubmodule[]> {
-  try {
-    const submodulesQuery = query(collection(adminFirestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
-    const snapshot = await getDocs(submodulesQuery);
-    if (snapshot.empty) {
-      return [];
-    }
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AppSubmodule[];
-  } catch (error) {
-    console.error("Critical Error: Failed to fetch submodules on server-side:", error);
-    // In case of a critical error, return an empty array to prevent a full crash.
-    // The UI will show a "no submodules" state.
-    return [];
-  }
-}
 
-export default async function AppLayout({
+export default function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const submodules = await getSubmodules();
+  const firestore = useFirestore();
+
+  const submodulesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'appSubmodules'), orderBy('group'), orderBy('position'));
+  }, [firestore]);
+
+  const { data: submodules, isLoading } = useCollection<AppSubmodule>(submodulesQuery);
+
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
-       <AppLayoutClient submodules={submodules}>
+       <AppLayoutClient submodules={submodules || []}>
           {children}
        </AppLayoutClient>
     </div>
