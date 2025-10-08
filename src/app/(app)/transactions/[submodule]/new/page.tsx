@@ -123,9 +123,6 @@ export default function NewTransactionEntryPage() {
   
   const [initialFormData, setInitialFormData] = useState<Partial<TransactionEntry> | null>(null);
   
-  const formDataRef = useRef(formData);
-  const manualSaveRef = useRef(false);
-
   const [allFormFields, setAllFormFields] = useState<FormField[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(true);
 
@@ -139,10 +136,9 @@ export default function NewTransactionEntryPage() {
   const submoduleId = submodule?.id;
 
   const userDocRef = useMemoFirebase(() => {
-      if (!firestore || !user) return null;
-      return doc(firestore, 'users', user.uid);
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
-
   const { data: userData } = useDoc<User>(userDocRef);
   
    const rolesQuery = useMemoFirebase(() => {
@@ -163,7 +159,7 @@ export default function NewTransactionEntryPage() {
         Object.assign(mergedPermissions, role.permissions);
       }
     });
-    return mergedPermissions;
+    return permissions;
   }, [user, roleDocs]);
 
   const canWrite = useMemo(() => {
@@ -178,17 +174,13 @@ export default function NewTransactionEntryPage() {
 
   const [isEditing, setIsEditing] = useState(false);
   
-   useEffect(() => {
+  useEffect(() => {
      if(canWrite) {
         setIsEditing(true);
      }
   }, [canWrite]);
 
 
-  useEffect(() => {
-    formDataRef.current = formData;
-  }, [formData]);
-  
   useEffect(() => {
     const fetchFields = async () => {
         if (!firestore || !submoduleId) {
@@ -271,8 +263,16 @@ export default function NewTransactionEntryPage() {
 
         setFormData(dataToLoad);
         setInitialFormData(JSON.parse(JSON.stringify(dataToLoad)));
+    } else {
+        // Set initial form data for new entries to establish a baseline
+        setInitialFormData({
+            status: 'DR',
+            user: user?.displayName || user?.email || 'Current User',
+            customFields: {},
+            lineItems: [],
+        });
     }
-}, [loadedEntry, searchParams]);
+}, [loadedEntry, searchParams, user]);
 
 
   const recursiveConvertToTimestamp = (obj: any): any => {
@@ -302,7 +302,8 @@ export default function NewTransactionEntryPage() {
   
  const saveCurrentStateAsDraft = useCallback(async (currentData: Partial<TransactionEntry>) => {
     if (!firestore || !submoduleId) return null;
-
+    
+    // Create a deep copy to avoid mutating the original state
     const dataToSave = recursiveConvertToTimestamp(JSON.parse(JSON.stringify(currentData)));
     dataToSave.status = 'DR';
     dataToSave.submodule = submoduleName;
@@ -314,34 +315,33 @@ export default function NewTransactionEntryPage() {
     } else {
         dataToSave.createdAt = serverTimestamp();
         const newDocRef = await addDocumentNonBlocking(collection(firestore, 'transactionEntries'), dataToSave);
+        if (newDocRef?.id) {
+            setFormData(prev => ({...prev, id: newDocRef.id}));
+            setEntryId(newDocRef.id);
+        }
         return newDocRef?.id || null;
     }
 }, [firestore, submoduleId, submoduleName]);
 
 
-  useEffect(() => {
-    const autosave = () => {
-        const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
-        
-        if (isEditing && hasChanged && formDataRef.current.status !== 'A') {
-          saveCurrentStateAsDraft(formDataRef.current);
-          toast({
-            title: "Draft Saved",
-            description: "Your changes have been automatically saved as a draft.",
-          });
-        }
-    };
-
-    const intervalId = setInterval(autosave, 30000); // Autosave every 30 seconds
-    
-    return () => {
-      clearInterval(intervalId);
-      // Only run the cleanup-save if a manual save hasn't just happened.
-      if (!manualSaveRef.current) {
-        autosave();
+ useEffect(() => {
+    // Debounce timer ref
+    const handler = setTimeout(() => {
+      // Check if the form is in a state that should be auto-saved
+      const isNewDraft = !formData.id && !searchParams.get('editId') && !searchParams.get('duplicateId');
+      const isDirty = JSON.stringify(initialFormData) !== JSON.stringify(formData);
+      
+      // We only want to autosave new drafts that have been changed.
+      if (isEditing && isDirty && isNewDraft) {
+        saveCurrentStateAsDraft(formData);
       }
+    }, 2000); // Wait for 2 seconds of inactivity before saving
+
+    // Cleanup function to cancel the timeout if the component unmounts or formData changes
+    return () => {
+      clearTimeout(handler);
     };
-  }, [isEditing, initialFormData, saveCurrentStateAsDraft, toast]);
+  }, [formData, initialFormData, isEditing, saveCurrentStateAsDraft, searchParams]);
 
 
   const handleSaveEntry = async (submissionStatus: 'DR' | 'A') => {
@@ -350,8 +350,6 @@ export default function NewTransactionEntryPage() {
       return;
     }
     
-    manualSaveRef.current = true;
-
     const finalData = recursiveConvertToTimestamp(JSON.parse(JSON.stringify(formData)));
     finalData.status = submissionStatus;
     finalData.submodule = submoduleName;
@@ -373,7 +371,6 @@ export default function NewTransactionEntryPage() {
         } catch (error) {
             console.error("Transaction failed: ", error);
             toast({ variant: 'destructive', title: 'Failed to Save', description: 'Could not generate a document number. Please try again.' });
-            manualSaveRef.current = false;
             return;
         }
     }
