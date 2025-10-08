@@ -144,11 +144,13 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
       return permissions[mainModuleSlug]?.[subSlug]?.write;
   }, [permissions, submodule, user]);
 
-  const [isEditing, setIsEditing] = useState(canWrite);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-      setIsEditing(canWrite);
-  },[canWrite])
+    if (canWrite) {
+      setIsEditing(true);
+    }
+  }, [canWrite]);
 
 
   useEffect(() => {
@@ -180,7 +182,9 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
         }
     };
 
-    fetchFields();
+    if (submoduleId) {
+        fetchFields();
+    }
   }, [firestore, submoduleId, toast]);
 
   const headerFields = useMemo(() => allFormFields?.filter(f => f.section === 'header') || [], [allFormFields]);
