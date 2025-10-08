@@ -17,6 +17,7 @@ import {
   HeartHandshake,
   ArrowRightLeft,
   FileText,
+  Database,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -37,6 +38,7 @@ import { useUser } from '@/firebase';
 const mobileNavItems = [
     { href: '/dashboard', icon: Home, label: 'Dashboard' },
     { href: '/transactions', icon: ArrowRightLeft, label: 'Transactions' },
+    { href: '/masters', icon: Database, label: 'Masters' },
     { href: '/sales', icon: ShoppingCart, label: 'Sales' },
     { href: '/inventory', icon: Package, label: 'Inventory' },
     { href: '/purchase', icon: Briefcase, label: 'Purchase' },
