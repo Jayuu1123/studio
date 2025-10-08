@@ -98,7 +98,7 @@ function DynamicFormField({ field, value, onChange, disabled }: { field: FormFie
 }
 
 
-export default function NewTransactionEntryPage({ permissions }: { permissions: PermissionSet }) {
+export default function NewTransactionEntryPage() {
   const params = useParams();
   const submoduleSlug = params.submodule as string;
   const submoduleName = unslugify(submoduleSlug);
@@ -130,10 +130,38 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
     return query(collection(firestore, 'appSubmodules'), orderBy('position'));
   }, [firestore]);
 
-  const { data: submodules } = useCollection<AppSubmodule>(submodulesQuery);
+  const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
   const submodule = useMemo(() => submodules?.find(s => s.name === submoduleName), [submodules, submoduleName]);
   const submoduleId = submodule?.id;
   
+   const rolesQuery = useMemoFirebase(() => {
+    if (!firestore || !user || !userData?.roles || userData.roles.length === 0) return null;
+    return query(collection(firestore, 'roles'), where('__name__', 'in', userData.roles.map(role => slugify(role)) ));
+  }, [firestore, user, userData?.roles]);
+
+  const { data: roleDocs } = useCollection<Role>(rolesQuery);
+  
+  const userDocRef = useMemoFirebase(() => {
+      if (!firestore || !user) return null;
+      return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: userData } = useDoc<User>(userDocRef);
+
+  const permissions = useMemo<PermissionSet | null>(() => {
+    if (!user) return null;
+    if (user.email === 'sa@admin.com') return { all: true };
+    if (!roleDocs) return null;
+
+    const mergedPermissions: PermissionSet = {};
+    roleDocs.forEach(role => {
+      if (role.permissions) {
+        Object.assign(mergedPermissions, role.permissions);
+      }
+    });
+    return mergedPermissions;
+  }, [user, roleDocs]);
+
   const canWrite = useMemo(() => {
       if (!permissions || !submodule) return false;
       if (user?.email === 'sa@admin.com') return true;
@@ -239,7 +267,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
         setFormData(dataToLoad);
         setInitialFormData(JSON.parse(JSON.stringify(dataToLoad)));
     }
-}, [loadedEntry, searchParams, canWrite]);
+}, [loadedEntry, searchParams]);
 
 
   const recursiveConvertToTimestamp = (obj: any): any => {
@@ -353,23 +381,8 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
     router.push(`/transactions/${submoduleSlug}`);
   };
 
-  const handleFieldChange = async (updateFn: (prev: Partial<TransactionEntry>) => Partial<TransactionEntry>) => {
-    const updatedData = updateFn(formData);
-
-    if (!formData.id && isEditing) {
-      const draftId = await saveCurrentStateAsDraft({ ...formData, ...updatedData });
-      if (draftId) {
-        router.replace(`/transactions/${submoduleSlug}/new?editId=${draftId}`, { scroll: false });
-        setFormData(prev => ({...prev, ...updatedData, id: draftId}));
-        setEntryId(draftId);
-      }
-    } else {
-        setFormData(prev => ({ ...prev, ...updatedData }));
-    }
-  };
-
   const handleHeaderFieldChange = (fieldKey: string, value: any) => {
-    handleFieldChange(prev => ({ 
+    setFormData(prev => ({ 
         ...prev, 
         customFields: {
             ...prev.customFields,
@@ -379,7 +392,7 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
   };
 
   const handleDetailFieldChange = (rowIndex: number, fieldKey: string, value: any) => {
-    handleFieldChange(prev => {
+    setFormData(prev => {
       const newLineItems = [...(prev.lineItems || [])];
       if (!newLineItems[rowIndex]) newLineItems[rowIndex] = {};
       newLineItems[rowIndex][fieldKey] = value;
@@ -388,21 +401,21 @@ export default function NewTransactionEntryPage({ permissions }: { permissions: 
   };
 
   const addLineItem = () => {
-    handleFieldChange(prev => ({
+    setFormData(prev => ({
       ...prev,
       lineItems: [...(prev.lineItems || []), {}]
     }));
   };
 
   const removeLineItem = (rowIndex: number) => {
-    handleFieldChange(prev => ({
+    setFormData(prev => ({
       ...prev,
       lineItems: (prev.lineItems || []).filter((_, index) => index !== rowIndex)
     }));
   };
 
 
-  if (isLoadingEntry || isLoadingFields || !submodule) {
+  if (isLoadingEntry || isLoadingFields || isLoadingSubmodules || !submodule) {
     return <div>Loading form...</div>
   }
   
