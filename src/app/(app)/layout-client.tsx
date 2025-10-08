@@ -74,6 +74,7 @@ export function AppLayoutClient({
   const { toast } = useToast();
   const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
   const [permissions, setPermissions] = useState<PermissionSet | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
   
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -156,7 +157,7 @@ export function AppLayoutClient({
   }, [activeLicenses, isLoadingLicenses, user]);
 
    useEffect(() => {
-        if (isUserLoading) {
+        if (isUserLoading || isUserDataLoading) {
             return;
         }
 
@@ -166,38 +167,41 @@ export function AppLayoutClient({
         }
 
         if (userData?.status === 'disabled') {
-            if (auth) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Account Disabled',
-                    description: 'Your account has been disabled. Logging you out.',
-                });
-                 auth.signOut().then(() => {
-                    sessionStorage.removeItem('userSessionId');
-                    router.push('/');
-                });
-            }
+            setSessionStatus('invalid');
+             toast({
+                variant: 'destructive',
+                title: 'Account Disabled',
+                description: 'Your account has been disabled. Logging you out.',
+            });
+            return;
         }
         
         const clientSessionId = sessionStorage.getItem('userSessionId');
         if (userData && clientSessionId && userData.sessionId && userData.sessionId !== clientSessionId) {
-             if (auth) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Session Expired',
-                    description: 'You have been logged out because you signed in on another device.',
-                });
-                auth.signOut().then(() => {
-                    sessionStorage.removeItem('userSessionId');
-                    router.push('/');
-                });
-            }
+             setSessionStatus('invalid');
+             toast({
+                variant: 'destructive',
+                title: 'Session Expired',
+                description: 'You have been logged out because you signed in on another device.',
+            });
+            return;
         }
 
-    }, [user, userData, isUserLoading, auth, toast, router]);
+        setSessionStatus('valid');
+
+    }, [user, userData, isUserLoading, isUserDataLoading, auth, toast, router]);
+
+    useEffect(() => {
+      if (sessionStatus === 'invalid' && auth) {
+        auth.signOut().then(() => {
+            sessionStorage.removeItem('userSessionId');
+            router.push('/');
+        });
+      }
+    }, [sessionStatus, auth, router]);
 
   
-  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules;
+  const isAppLoading = isUserLoading || isUserDataLoading || isLoadingLicenses || permissions === null || isLoadingSubmodules || sessionStatus === 'checking';
   const isSettingsPath = pathname.startsWith('/settings');
   const shouldShowWall = user && isLicensed === false && !isSettingsPath && pathname !== '/';
   
