@@ -43,6 +43,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import type { TransactionEntry, FormField, AppSubmodule, PermissionSet, Role, User } from '@/lib/types';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { LineItemFormDialog } from '@/components/transactions/line-item-form-dialog';
 
 
 function DynamicFormField({ field, value, onChange, disabled }: { field: FormField, value: any, onChange: (fieldKey: string, value: any) => void, disabled: boolean }) {
@@ -112,8 +113,11 @@ export default function NewTransactionEntryPage() {
       status: 'DR',
       user: user?.displayName || user?.email || 'Current User',
       customFields: {},
-      lineItems: [{}], // Start with one empty line item
+      lineItems: [],
   });
+  
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<{ index: number; data: any } | null>(null);
 
   const [entryId, setEntryId] = useState<string | null>(searchParams.get('editId') || searchParams.get('duplicateId'));
   
@@ -173,7 +177,7 @@ export default function NewTransactionEntryPage() {
   }, [permissions, submodule, user]);
 
   const [isEditing, setIsEditing] = useState(false);
-
+  
    useEffect(() => {
     if (canWrite) {
       setIsEditing(true);
@@ -259,10 +263,11 @@ export default function NewTransactionEntryPage() {
             setEntryId(null);
             setIsEditing(true);
         }
-
-        if (!dataToLoad.lineItems || dataToLoad.lineItems.length === 0) {
-            dataToLoad.lineItems = [{}];
+        
+        if (!dataToLoad.lineItems) {
+            dataToLoad.lineItems = [];
         }
+
 
         setFormData(dataToLoad);
         setInitialFormData(JSON.parse(JSON.stringify(dataToLoad)));
@@ -398,20 +403,30 @@ export default function NewTransactionEntryPage() {
     }));
   };
 
-  const handleDetailFieldChange = (rowIndex: number, fieldKey: string, value: any) => {
+  const handleSaveLineItem = (itemData: any) => {
     setFormData(prev => {
       const newLineItems = [...(prev.lineItems || [])];
-      if (!newLineItems[rowIndex]) newLineItems[rowIndex] = {};
-      newLineItems[rowIndex][fieldKey] = value;
+      if (editingItem !== null) {
+        // Update existing item
+        newLineItems[editingItem.index] = itemData;
+      } else {
+        // Add new item
+        newLineItems.push(itemData);
+      }
       return { ...prev, lineItems: newLineItems };
     });
+    setEditingItem(null);
+    setIsDialogOpen(false);
   };
 
-  const addLineItem = () => {
-    setFormData(prev => ({
-      ...prev,
-      lineItems: [...(prev.lineItems || []), {}]
-    }));
+  const handleEditItem = (index: number) => {
+    setEditingItem({ index, data: formData.lineItems?.[index] || {} });
+    setIsDialogOpen(true);
+  };
+  
+  const handleAddNewItem = () => {
+    setEditingItem(null);
+    setIsDialogOpen(true);
   };
 
   const removeLineItem = (rowIndex: number) => {
@@ -435,137 +450,155 @@ export default function NewTransactionEntryPage() {
   const effectiveIsEditing = isEditing && canWrite;
 
   return (
-    <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" className="h-7 w-7" asChild>
-          <Link href={`/transactions/${submoduleSlug}`}>
-            <ChevronLeft className="h-4 w-4" />
-            <span className="sr-only">Back</span>
-          </Link>
-        </Button>
-        <h1 className="flex-1 shrink-0 whitespace-nowrap text-xl font-semibold font-headline tracking-tight sm:grow-0">
-          {effectiveIsEditing ? pageTitle.replace('View', 'Edit') : pageTitle}
-        </h1>
+    <>
+      <LineItemFormDialog
+        isOpen={isDialogOpen}
+        setIsOpen={setIsDialogOpen}
+        onSave={handleSaveLineItem}
+        fields={detailFields}
+        initialData={editingItem?.data}
+        isEditing={effectiveIsEditing}
+      />
+      <div className="mx-auto grid w-full flex-1 auto-rows-max gap-4">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="icon" className="h-7 w-7" asChild>
+            <Link href={`/transactions/${submoduleSlug}`}>
+              <ChevronLeft className="h-4 w-4" />
+              <span className="sr-only">Back</span>
+            </Link>
+          </Button>
+          <h1 className="flex-1 shrink-0 whitespace-nowrap text-xl font-semibold font-headline tracking-tight sm:grow-0">
+            {effectiveIsEditing ? pageTitle.replace('View', 'Edit') : pageTitle}
+          </h1>
 
-        <div className="hidden items-center gap-2 md:ml-auto md:flex">
-           {searchParams.get('editId') && !effectiveIsEditing && canWrite && (
-             <Button onClick={() => setIsEditing(true)}>
-               <Edit className="h-4 w-4 mr-2" />
-               Edit Entry
-             </Button>
-           )}
-           {effectiveIsEditing && (
-             <>
-                <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
-                <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
-             </>
-           )}
+          <div className="hidden items-center gap-2 md:ml-auto md:flex">
+            {searchParams.get('editId') && !effectiveIsEditing && canWrite && (
+              <Button onClick={() => setIsEditing(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Entry
+              </Button>
+            )}
+            {effectiveIsEditing && (
+              <>
+                  <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
+                  <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="grid auto-rows-max items-start gap-4 lg:col-span-3">
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Principle</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {headerFields && headerFields.map(field => (
-                    <DynamicFormField 
-                        key={field.id} 
-                        field={field} 
-                        value={formData.customFields?.[field.key] ?? ''}
-                        onChange={handleHeaderFieldChange}
-                        disabled={!effectiveIsEditing}
-                    />
-                ))}
-                {!isLoadingFields && headerFields?.length === 0 && (
-                    <p className="text-muted-foreground md:col-span-full">No header fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/header`} className="text-primary underline">Design the form now</Link>.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-           <Card>
-                <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle>Indent Detail</CardTitle>
-                        {effectiveIsEditing && (
-                           <Button size="sm" onClick={addLineItem}>
-                                <PlusCircle className="h-4 w-4 mr-2" />
-                                Add Row
-                           </Button>
-                        )}
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                {detailFields.map(field => (
-                                    <TableHead key={field.id}>{field.label}</TableHead>
-                                ))}
-                                {effectiveIsEditing && (
-                                <TableHead className="w-[50px]">
-                                    <span className="sr-only">Actions</span>
-                                </TableHead>
-                                )}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {formData.lineItems?.map((item, rowIndex) => (
-                                <TableRow key={rowIndex}>
-                                    {detailFields.map(field => (
-                                        <TableCell key={field.id}>
-                                            <Input
-                                                type={field.type === 'number' ? 'number' : 'text'}
-                                                value={item[field.key] || ''}
-                                                onChange={(e) => handleDetailFieldChange(rowIndex, field.key, field.type === 'number' ? e.target.valueAsNumber : e.target.value)}
-                                                className="w-full"
-                                                disabled={!effectiveIsEditing}
-                                                placeholder={field.placeholder}
-                                            />
-                                        </TableCell>
-                                    ))}
-                                    {effectiveIsEditing && (
-                                    <TableCell>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => removeLineItem(rowIndex)}
-                                            disabled={!effectiveIsEditing}
-                                        >
-                                            <Trash2 className="h-4 w-4 text-red-500" />
-                                        </Button>
-                                    </TableCell>
-                                    )}
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                    {detailFields.length === 0 && !isLoadingFields &&(
-                         <p className="text-muted-foreground text-center py-4">No detail fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/details`} className="text-primary underline">Design the form now</Link>.</p>
-                    )}
-                    {isLoadingFields && <p className="text-muted-foreground text-center py-4">Loading fields...</p>}
-                </CardContent>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid auto-rows-max items-start gap-4 lg:col-span-3">
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Principle</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {headerFields && headerFields.map(field => (
+                      <DynamicFormField 
+                          key={field.id} 
+                          field={field} 
+                          value={formData.customFields?.[field.key] ?? ''}
+                          onChange={handleHeaderFieldChange}
+                          disabled={!effectiveIsEditing}
+                      />
+                  ))}
+                  {!isLoadingFields && headerFields?.length === 0 && (
+                      <p className="text-muted-foreground md:col-span-full">No header fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/header`} className="text-primary underline">Design the form now</Link>.</p>
+                  )}
+                </div>
+              </CardContent>
             </Card>
+
+            <Card>
+                  <CardHeader>
+                      <div className="flex justify-between items-center">
+                          <CardTitle>Item Details</CardTitle>
+                          {effectiveIsEditing && (
+                            <Button size="sm" onClick={handleAddNewItem}>
+                                  <PlusCircle className="h-4 w-4 mr-2" />
+                                  Add Item
+                            </Button>
+                          )}
+                      </div>
+                  </CardHeader>
+                  <CardContent>
+                      <Table>
+                          <TableHeader>
+                              <TableRow>
+                                  {detailFields.map(field => (
+                                      <TableHead key={field.id}>{field.label}</TableHead>
+                                  ))}
+                                  {effectiveIsEditing && (
+                                  <TableHead className="w-[100px] text-right">
+                                      Actions
+                                  </TableHead>
+                                  )}
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                              {formData.lineItems?.map((item, rowIndex) => (
+                                  <TableRow key={rowIndex}>
+                                      {detailFields.map(field => (
+                                          <TableCell key={field.id}>
+                                              {item[field.key] || 'N/A'}
+                                          </TableCell>
+                                      ))}
+                                      {effectiveIsEditing && (
+                                      <TableCell className="text-right">
+                                          <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() => handleEditItem(rowIndex)}
+                                              disabled={!effectiveIsEditing}
+                                          >
+                                              <Edit className="h-4 w-4 text-blue-500" />
+                                          </Button>
+                                          <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() => removeLineItem(rowIndex)}
+                                              disabled={!effectiveIsEditing}
+                                          >
+                                              <Trash2 className="h-4 w-4 text-red-500" />
+                                          </Button>
+                                      </TableCell>
+                                      )}
+                                  </TableRow>
+                              ))}
+                              {!formData.lineItems?.length && (
+                                <TableRow>
+                                  <TableCell colSpan={detailFields.length + 1} className="text-center">
+                                    No items added yet.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                          </TableBody>
+                      </Table>
+                      {detailFields.length === 0 && !isLoadingFields &&(
+                          <p className="text-muted-foreground text-center py-4">No detail fields have been defined for this form. <Link href={`/form-setting/${submoduleId}/details`} className="text-primary underline">Design the form now</Link>.</p>
+                      )}
+                      {isLoadingFields && <p className="text-muted-foreground text-center py-4">Loading fields...</p>}
+                  </CardContent>
+              </Card>
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-2 md:hidden">
+          {searchParams.get('editId') && !effectiveIsEditing && canWrite && (
+              <Button onClick={() => setIsEditing(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Entry
+              </Button>
+            )}
+            {effectiveIsEditing && (
+              <>
+                  <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
+                  <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
+              </>
+            )}
         </div>
       </div>
-      <div className="flex items-center justify-center gap-2 md:hidden">
-         {searchParams.get('editId') && !effectiveIsEditing && canWrite && (
-             <Button onClick={() => setIsEditing(true)}>
-               <Edit className="h-4 w-4 mr-2" />
-               Edit Entry
-             </Button>
-           )}
-           {effectiveIsEditing && (
-             <>
-                <Button variant="outline" onClick={() => handleSaveEntry('DR')}>Save as Draft</Button>
-                <Button onClick={() => handleSaveEntry('A')}>Submit for Approval</Button>
-             </>
-           )}
-      </div>
-    </div>
+    </>
   );
 }
