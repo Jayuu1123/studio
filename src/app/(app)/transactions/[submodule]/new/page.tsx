@@ -41,7 +41,7 @@ import { addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-b
 import { collection, serverTimestamp, getDocs, query, where, orderBy, limit, doc, Timestamp, runTransaction } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
-import type { TransactionEntry, FormField, AppSubmodule, PermissionSet } from '@/lib/types';
+import type { TransactionEntry, FormField, AppSubmodule, PermissionSet, Role, User } from '@/lib/types';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 
 
@@ -110,7 +110,7 @@ export default function NewTransactionEntryPage() {
   
   const [formData, setFormData] = useState<Partial<TransactionEntry>>({
       status: 'DR',
-      user: 'Current User', // Should be replaced with actual user
+      user: user?.displayName || user?.email || 'Current User',
       customFields: {},
       lineItems: [{}], // Start with one empty line item
   });
@@ -133,6 +133,13 @@ export default function NewTransactionEntryPage() {
   const { data: submodules, isLoading: isLoadingSubmodules } = useCollection<AppSubmodule>(submodulesQuery);
   const submodule = useMemo(() => submodules?.find(s => s.name === submoduleName), [submodules, submoduleName]);
   const submoduleId = submodule?.id;
+
+  const userDocRef = useMemoFirebase(() => {
+      if (!firestore || !user) return null;
+      return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: userData } = useDoc<User>(userDocRef);
   
    const rolesQuery = useMemoFirebase(() => {
     if (!firestore || !user || !userData?.roles || userData.roles.length === 0) return null;
@@ -141,13 +148,6 @@ export default function NewTransactionEntryPage() {
 
   const { data: roleDocs } = useCollection<Role>(rolesQuery);
   
-  const userDocRef = useMemoFirebase(() => {
-      if (!firestore || !user) return null;
-      return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-
-  const { data: userData } = useDoc<User>(userDocRef);
-
   const permissions = useMemo<PermissionSet | null>(() => {
     if (!user) return null;
     if (user.email === 'sa@admin.com') return { all: true };
@@ -174,7 +174,7 @@ export default function NewTransactionEntryPage() {
 
   const [isEditing, setIsEditing] = useState(false);
 
-  useEffect(() => {
+   useEffect(() => {
     if (canWrite) {
       setIsEditing(true);
     }
@@ -315,18 +315,25 @@ export default function NewTransactionEntryPage() {
 
 
   useEffect(() => {
+    const autosave = () => {
+        if (manualSaveRef.current) return;
+        
+        const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
+        
+        if (isEditing && hasChanged && formDataRef.current.status !== 'A') {
+          saveCurrentStateAsDraft(formDataRef.current);
+          toast({
+            title: "Draft Saved",
+            description: "Your changes have been automatically saved as a draft.",
+          });
+        }
+    };
+
+    const intervalId = setInterval(autosave, 30000); // Autosave every 30 seconds
+    
     return () => {
-      if (manualSaveRef.current) return;
-      
-      const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
-      
-      if (isEditing && hasChanged && formDataRef.current.status !== 'A') {
-        saveCurrentStateAsDraft(formDataRef.current);
-        toast({
-          title: "Draft Saved",
-          description: "Your changes have been automatically saved as a draft.",
-        });
-      }
+      clearInterval(intervalId);
+      autosave(); // Save once on unmount
     };
   }, [isEditing, initialFormData, saveCurrentStateAsDraft, toast]);
 
