@@ -179,9 +179,9 @@ export default function NewTransactionEntryPage() {
   const [isEditing, setIsEditing] = useState(false);
   
    useEffect(() => {
-    if (canWrite) {
-      setIsEditing(true);
-    }
+     if(canWrite) {
+        setIsEditing(true);
+     }
   }, [canWrite]);
 
 
@@ -321,8 +321,6 @@ export default function NewTransactionEntryPage() {
 
   useEffect(() => {
     const autosave = () => {
-        if (manualSaveRef.current) return;
-        
         const hasChanged = JSON.stringify(initialFormData) !== JSON.stringify(formDataRef.current);
         
         if (isEditing && hasChanged && formDataRef.current.status !== 'A') {
@@ -338,7 +336,10 @@ export default function NewTransactionEntryPage() {
     
     return () => {
       clearInterval(intervalId);
-      autosave(); // Save once on unmount
+      // Only run the cleanup-save if a manual save hasn't just happened.
+      if (!manualSaveRef.current) {
+        autosave();
+      }
     };
   }, [isEditing, initialFormData, saveCurrentStateAsDraft, toast]);
 
