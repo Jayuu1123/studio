@@ -159,7 +159,7 @@ export default function NewTransactionEntryPage() {
         Object.assign(mergedPermissions, role.permissions);
       }
     });
-    return permissions;
+    return mergedPermissions;
   }, [user, roleDocs]);
 
   const canWrite = useMemo(() => {
@@ -175,9 +175,9 @@ export default function NewTransactionEntryPage() {
   const [isEditing, setIsEditing] = useState(false);
   
   useEffect(() => {
-     if(canWrite) {
-        setIsEditing(true);
-     }
+    if (canWrite) {
+      setIsEditing(true);
+    }
   }, [canWrite]);
 
 
