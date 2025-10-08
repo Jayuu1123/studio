@@ -61,25 +61,6 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-4">
-        <Breadcrumb>
-            <BreadcrumbList>
-                <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                    <Link href="/dashboard">Dashboard</Link>
-                </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                    <Link href="/masters">Masters</Link>
-                </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                <BreadcrumbPage>Products</BreadcrumbPage>
-                </BreadcrumbItem>
-            </BreadcrumbList>
-        </Breadcrumb>
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
